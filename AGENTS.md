@@ -83,3 +83,13 @@ Cost: ~$0.13 per test. Requires a separate agent wallet (not the provider wallet
 - The provider wallet address is derived from `PROVIDER_PRIVATE_KEY`. To check it, start any provider and read the `/health` endpoint.
 - The live deployed provider is **Mozart** (multi-provider orchestrator) at `https://hs58-production-1927.up.railway.app`. It uses the `hs58-orchestra` template and coordinates across chutes, desearch, numinous, vericore, openrouter, e2b, and replicate.
 - The `scripts/test-payment.mjs` uses DRAIN contract `0x1C19...` but the provider templates use `0x0C2B...`. This contract mismatch causes `channel_not_found` errors. Check with the Handshake58 team on Discord for the correct contract address before running self-tests.
+
+### Numinous SN6 (forecasting agent)
+
+The user also mines on Bittensor Subnet 6 (Numinous). Their forecasting agent code lives at `github.com/benp055424/numinous` in `neurons/miner/agents/agent_v8.py`. Key context:
+
+- **Current performance:** Emission rank 8th, Brier 0.2362, -0.049 negative bias
+- **Update window:** Code can be updated once every 3 days via `numi upload-agent`
+- **Competitive intelligence:** Full code from top 5 miners was downloaded and analyzed. See `/opt/cursor/artifacts/sn6_competitive_analysis.md` for the detailed improvement plan.
+- **Priority fixes for next submission:** Upgrade to gpt-5-mini, fix BASE_RATE from 0.35→0.43, add extremizing transform, fix weather sigmoid, add debiasing step (+0.045).
+- **Scoring:** Winner-takes-all per pool (global 45% + domain pools: geo 20%, finance 15%, sports 5%, crypto 5%, weather 2.5%, culture 2.5%). Being top in any single domain pool earns emissions.
