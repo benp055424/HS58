@@ -81,3 +81,5 @@ Cost: ~$0.13 per test. Requires a separate agent wallet (not the provider wallet
 - Each provider stores vouchers in `./data/vouchers.json` — this directory is created automatically on first write.
 - Providers that need upstream API keys (e.g. `hs58-openai` → `OPENAI_API_KEY`) will fail at startup with `Missing env: <KEY>` if the key is not set.
 - The provider wallet address is derived from `PROVIDER_PRIVATE_KEY`. To check it, start any provider and read the `/health` endpoint.
+- The live deployed provider is **Mozart** (multi-provider orchestrator) at `https://hs58-production-1927.up.railway.app`. It uses the `hs58-orchestra` template and coordinates across chutes, desearch, numinous, vericore, openrouter, e2b, and replicate.
+- The `scripts/test-payment.mjs` uses DRAIN contract `0x1C19...` but the provider templates use `0x0C2B...`. This contract mismatch causes `channel_not_found` errors. Check with the Handshake58 team on Discord for the correct contract address before running self-tests.
