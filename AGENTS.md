@@ -57,7 +57,7 @@ Three secrets are available in the Cursor Cloud environment:
 |---|---|
 | `PROVIDER_PRIVATE_KEY` | Polygon wallet key for running providers with real blockchain connectivity |
 | `POLYGON_RPC_URL` | Alchemy Polygon RPC for reliable on-chain operations |
-| `AGENT_PRIVATE_KEY` | Separate wallet for running `scripts/test-payment.mjs` (currently set to an address, not a private key — needs correction) |
+| `AGENT_PRIVATE_KEY` | Separate Polygon wallet (`0xd229...D052`) for running `scripts/test-payment.mjs` — funded with ~$1.78 USDC + 10.9 POL |
 
 When creating `.env` files for providers, use `$PROVIDER_PRIVATE_KEY` and `$POLYGON_RPC_URL` from the environment.
 
