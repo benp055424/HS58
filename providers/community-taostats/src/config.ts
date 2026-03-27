@@ -126,7 +126,7 @@ export function loadConfig(): ProviderConfig {
     polygonRpcUrl: process.env.POLYGON_RPC_URL || undefined,
     claimThreshold: BigInt(optionalEnv('CLAIM_THRESHOLD', '1000000')),
     storagePath: optionalEnv('STORAGE_PATH', './data/vouchers.json'),
-    providerName: optionalEnv('PROVIDER_NAME', 'Community-Taostats'),
+    providerName: optionalEnv('PROVIDER_NAME', 'Bittensor-Hub'),
     autoClaimIntervalMinutes: parseInt(optionalEnv('AUTO_CLAIM_INTERVAL_MINUTES', '10')),
     autoClaimBufferSeconds: parseInt(optionalEnv('AUTO_CLAIM_BUFFER_SECONDS', '3600')),
   };

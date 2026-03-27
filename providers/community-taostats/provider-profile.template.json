@@ -1,0 +1,12 @@
+{
+  "name": "Community Taostats Hub",
+  "apiUrl": "https://YOUR-DEPLOYED-URL",
+  "providerAddress": "0xYOUR_PROVIDER_WALLET",
+  "description": "Bittensor routing and analytics hub for AI agents. Use bittensor/hub-router to choose the best subnet/provider path, then query Taostats data endpoints via taostats/query.",
+  "contactEmail": "you@example.com",
+  "logoUrl": "https://YOUR-LOGO-URL",
+  "website": "https://YOUR-WEBSITE",
+  "category": "data",
+  "additionalCategories": ["other"],
+  "supportsStreaming": false
+}

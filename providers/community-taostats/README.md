@@ -58,3 +58,7 @@ npm start
 ## Deployment
 
 Designed for Railway deployment. Set all environment variables in the Railway dashboard — never commit secrets.
+
+## Hub-first registration profile
+
+Use `provider-profile.template.json` as your marketplace registration baseline and keep the first model in your listing/docs as `bittensor/hub-router` so agents discover the routing entrypoint first.

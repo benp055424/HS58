@@ -28,7 +28,7 @@ app.use(express.json({ limit: '1mb' }));
 
 const queryCost = getRequestCost(config);
 const hubRouteCost = getHubRouteCost(config);
-const priceStr = formatUnits(queryCost, 6);
+const queryPriceStr = formatUnits(queryCost, 6);
 const hubRoutePriceStr = formatUnits(hubRouteCost, 6);
 
 app.get('/v1/pricing', (_req, res) => {
@@ -39,19 +39,19 @@ app.get('/v1/pricing', (_req, res) => {
     currency: 'USDC',
     decimals: 6,
     type: 'bittensor-data',
-    note: `Flat rate: $${priceStr} per API request. Covers all Taostats endpoints.`,
+    note: `Flat rate: $${queryPriceStr} per Taostats query, $${hubRoutePriceStr} per hub route request.`,
     models: {
-      'taostats/query': {
-        pricePerRequest: priceStr,
-        inputPer1kTokens: priceStr,
-        outputPer1kTokens: '0',
-        description: 'Query the Taostats API for Bittensor ecosystem data (price, metagraph, subnets, validators, miners, staking, etc.)',
-      },
       'bittensor/hub-router': {
         pricePerRequest: hubRoutePriceStr,
         inputPer1kTokens: hubRoutePriceStr,
         outputPer1kTokens: '0',
         description: 'Route an agent task to the best Bittensor subnet/provider path with concrete endpoint recommendations.',
+      },
+      'taostats/query': {
+        pricePerRequest: queryPriceStr,
+        inputPer1kTokens: queryPriceStr,
+        outputPer1kTokens: '0',
+        description: 'Query the Taostats API for Bittensor ecosystem data (price, metagraph, subnets, validators, miners, staking, etc.)',
       },
     },
   });
@@ -62,18 +62,18 @@ app.get('/v1/models', (_req, res) => {
     object: 'list',
     data: [
       {
-        id: 'taostats/query',
-        object: 'model',
-        created: Date.now(),
-        owned_by: 'taostats',
-        description: 'Query any Taostats API endpoint for Bittensor ecosystem data. 60+ endpoints covering price, metagraph, subnets, validators, miners, staking, liquidity, EVM, and more.',
-      },
-      {
         id: 'bittensor/hub-router',
         object: 'model',
         created: Date.now(),
         owned_by: 'handshake58',
         description: 'Task router for Bittensor: suggests best subnet/provider path and ready-to-use next actions.',
+      },
+      {
+        id: 'taostats/query',
+        object: 'model',
+        created: Date.now(),
+        owned_by: 'taostats',
+        description: 'Query any Taostats API endpoint for Bittensor ecosystem data. 60+ endpoints covering price, metagraph, subnets, validators, miners, staking, liquidity, EVM, and more.',
       },
     ],
   });
@@ -85,8 +85,8 @@ app.get('/v1/docs', (_req, res) => {
 This is a NON-STANDARD provider. It returns Bittensor ecosystem data from the Taostats API, not LLM chat.
 
 ## Models
+- bittensor/hub-router (default hub entry)
 - taostats/query
-- bittensor/hub-router
 
 ## How to Use
 
@@ -98,15 +98,16 @@ This is a NON-STANDARD provider. It returns Bittensor ecosystem data from the Ta
 ## Request Format
 
 The user message must be a JSON object with:
+- For bittensor/hub-router:
+  - goal (string, required): what the agent/user wants (e.g. "maximize sn13 emissions")
+  - constraints (object, optional): budget, speed, reliability, subnet preference
+  - preferredSubnets (number[], optional): subnet priority hints, e.g. [13,58]
+  - Example: {"goal": "route me to best provider for social data and tao analytics", "constraints": {"priority": "reliability"}, "preferredSubnets": [13,58]}
+
 - For taostats/query:
   - endpoint (string, required): Taostats path without /api/ prefix and /v1 suffix
   - params (object, optional): query parameters
   - Example: {"endpoint": "metagraph/latest", "params": {"netuid": 58, "limit": 5}}
-
-- For bittensor/hub-router:
-  - intent (string, required): what the agent/user wants (e.g. "maximize sn13 emissions")
-  - constraints (object, optional): budget, speed, reliability, subnet preference
-  - Example: {"intent": "route me to best provider for social data and tao analytics", "constraints": {"priority": "reliability"}}
 
 This calls: GET https://api.taostats.io/api/metagraph/latest/v1?netuid=58&limit=5
 
@@ -217,7 +218,7 @@ drain_chat parameters:
 ### Route a user objective to the best subnet/provider path
 drain_chat parameters:
   model: "bittensor/hub-router"
-  messages: [{"role": "user", "content": "{\\"intent\\": \\"I need SN13 social data and then discover high uptime providers on SN58\\", \\"constraints\\": {\\"priority\\": \\"reliability\\"}}"}]
+  messages: [{"role": "user", "content": "{\\"goal\\": \\"I need SN13 social data and then discover high uptime providers on SN58\\", \\"constraints\\": {\\"priority\\": \\"reliability\\"}, \\"preferredSubnets\\": [13,58]}"}]
 
 ### Get subnet 58 metagraph (top 10 by stake)
 drain_chat parameters:
@@ -241,7 +242,8 @@ drain_chat parameters:
 
 ## Pricing
 
-- $${priceStr} per request (flat rate, all endpoints)
+- taostats/query: $${queryPriceStr} per request
+- bittensor/hub-router: $${hubRoutePriceStr} per request
 - Full API reference: https://docs.taostats.io/reference
 `);
 });
@@ -449,7 +451,7 @@ async function start() {
     console.log(`Provider address: ${drainService.getProviderAddress()}`);
     console.log(`Chain: ${config.chainId === 137 ? 'Polygon' : 'Amoy Testnet'}`);
     console.log(`Taostats API: ${config.taostatsApiUrl} (${healthy ? 'online' : 'OFFLINE'})`);
-    console.log(`Price: $${priceStr}/request | Endpoints: ${getAllowedEndpoints().length}\n`);
+    console.log(`Price taostats/query: $${queryPriceStr} | Price bittensor/hub-router: $${hubRoutePriceStr} | Endpoints: ${getAllowedEndpoints().length}\n`);
   });
 }
 
