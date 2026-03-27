@@ -49,9 +49,35 @@ Assign different `PORT` values in each `.env` to run multiple providers simultan
 | `/v1/docs` | GET | None | Agent-readable usage instructions |
 | `/v1/chat/completions` | POST | DRAIN voucher | Execute a tool (requires payment) |
 
+### Environment secrets
+
+Three secrets are available in the Cursor Cloud environment:
+
+| Secret | Purpose |
+|---|---|
+| `PROVIDER_PRIVATE_KEY` | Polygon wallet key for running providers with real blockchain connectivity |
+| `POLYGON_RPC_URL` | Alchemy Polygon RPC for reliable on-chain operations |
+| `AGENT_PRIVATE_KEY` | Separate wallet for running `scripts/test-payment.mjs` (currently set to an address, not a private key — needs correction) |
+
+When creating `.env` files for providers, use `$PROVIDER_PRIVATE_KEY` and `$POLYGON_RPC_URL` from the environment.
+
+### Self-test payment script
+
+The `scripts/test-payment.mjs` script generates real on-chain DRAIN claims that boost SN58 miner scores. To run:
+
+```bash
+cd scripts
+npm install ethers  # one-time
+AGENT_PRIVATE_KEY=0x... POLYGON_RPC_URL=$POLYGON_RPC_URL node test-payment.mjs --dry-run  # list providers
+AGENT_PRIVATE_KEY=0x... POLYGON_RPC_URL=$POLYGON_RPC_URL node test-payment.mjs --provider "my-provider"  # real test
+```
+
+Cost: ~$0.13 per test. Requires a separate agent wallet (not the provider wallet) funded with ~$1 USDC + 0.1 POL.
+
 ### Gotchas
 
 - The `/v1/chat/completions` endpoint requires a valid `X-DRAIN-Voucher` header with a signed EIP-712 payment voucher. You cannot test it with a plain curl — use the public read-only endpoints (`/health`, `/v1/models`, `/v1/pricing`, `/v1/docs`) for verification.
 - `POLYGON_RPC_URL` is optional for starting the server but required for claiming payments. Without it, a warning is logged and the public RPC is used.
 - Each provider stores vouchers in `./data/vouchers.json` — this directory is created automatically on first write.
 - Providers that need upstream API keys (e.g. `hs58-openai` → `OPENAI_API_KEY`) will fail at startup with `Missing env: <KEY>` if the key is not set.
+- The provider wallet address is derived from `PROVIDER_PRIVATE_KEY`. To check it, start any provider and read the `/health` endpoint.
