@@ -16,8 +16,8 @@ const ROUTES: RouteBlueprint[] = [
   {
     key: 'sn13_data_universe',
     subnet: 13,
-    provider: 'macrocosmos-sn13',
-    model: 'sn13/social-data',
+    provider: 'sn13-external-provider',
+    model: 'sn13/social-data (external to HS58 list)',
     purpose: 'Fresh social scraping and desirability-driven data tasks',
     keywords: ['sn13', 'social', 'reddit', 'x', 'twitter', 'youtube', 'scrape', 'desirability'],
     notes: [
@@ -37,8 +37,8 @@ const ROUTES: RouteBlueprint[] = [
   {
     key: 'sn58_handshake_marketplace',
     subnet: 58,
-    provider: 'handshake58-directory',
-    model: 'provider-selection',
+    provider: 'hs58-marketplace-discovery',
+    model: 'discover via drain_providers/drain_provider_info',
     purpose: 'Discover and route to high-uptime providers with DRAIN channels',
     keywords: ['sn58', 'handshake', 'provider', 'marketplace', 'drain', 'uptime', 'agent'],
     notes: [
@@ -68,7 +68,7 @@ const ROUTES: RouteBlueprint[] = [
   },
   {
     key: 'taostats_analytics',
-    provider: 'community-taostats',
+    provider: 'HS58-Taostats',
     model: 'taostats/query',
     purpose: 'On-demand analytics: emissions, metagraph, stake, validator/miner metrics',
     keywords: ['taostats', 'analytics', 'emission', 'metagraph', 'validator', 'miner', 'stake'],
@@ -127,6 +127,7 @@ export function resolveHubIntent(
     `Constraints received: ${JSON.stringify(constraints)}`,
     ...new Set(top.flatMap(r => r.notes)),
     'Validate live provider availability before final routing.',
+    'SN13 route currently points to external provider context, not a guaranteed HS58-listed provider ID.',
   ];
 
   return {

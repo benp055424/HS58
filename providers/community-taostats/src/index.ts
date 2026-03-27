@@ -103,6 +103,7 @@ The user message must be a JSON object with:
   - constraints (object, optional): budget, speed, reliability, subnet preference
   - preferredSubnets (number[], optional): subnet priority hints, e.g. [13,58]
   - Example: {"goal": "route me to best provider for social data and tao analytics", "constraints": {"priority": "reliability"}, "preferredSubnets": [13,58]}
+  - Note: recommendations may include either a concrete provider/model OR a marketplace discovery action when no stable provider ID exists.
 
 - For taostats/query:
   - endpoint (string, required): Taostats path without /api/ prefix and /v1 suffix
