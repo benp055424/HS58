@@ -103,6 +103,11 @@ export function getRequestCost(cfg: ProviderConfig): bigint {
   return BigInt(Math.ceil(cfg.pricePerRequestUsdc * 1_000_000));
 }
 
+export function getHubRouteCost(cfg: ProviderConfig): bigint {
+  const routePrice = cfg.pricePerHubRouteUsdc ?? cfg.pricePerRequestUsdc;
+  return BigInt(Math.ceil(routePrice * 1_000_000));
+}
+
 export function loadConfig(): ProviderConfig {
   const chainId = parseInt(optionalEnv('CHAIN_ID', '137')) as 137 | 80002;
   if (chainId !== 137 && chainId !== 80002) throw new Error(`Invalid CHAIN_ID: ${chainId}`);
@@ -111,6 +116,9 @@ export function loadConfig(): ProviderConfig {
     taostatsApiUrl: optionalEnv('TAOSTATS_API_URL', 'https://api.taostats.io'),
     taostatsApiKey: requireEnv('TAOSTATS_API_KEY'),
     pricePerRequestUsdc: parseFloat(optionalEnv('PRICE_PER_REQUEST_USDC', '0.005')),
+    pricePerHubRouteUsdc: process.env.PRICE_PER_HUB_ROUTE_USDC
+      ? parseFloat(process.env.PRICE_PER_HUB_ROUTE_USDC)
+      : undefined,
     port: parseInt(optionalEnv('PORT', '3000')),
     host: optionalEnv('HOST', '0.0.0.0'),
     chainId,
