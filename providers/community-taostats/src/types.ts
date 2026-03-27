@@ -10,6 +10,7 @@ export interface ProviderConfig {
   taostatsApiUrl: string;
   taostatsApiKey: string;
   pricePerRequestUsdc: number;
+  pricePerHubRouteUsdc?: number;
   port: number;
   host: string;
   chainId: 137 | 80002;
@@ -57,6 +58,29 @@ export interface ChannelState {
 export interface QueryRequest {
   endpoint: string;
   params?: Record<string, string | number | boolean>;
+}
+
+export interface HubRouteRequest {
+  goal: string;
+  constraints?: Record<string, string | number | boolean>;
+  preferredSubnets?: number[];
+}
+
+export interface HubRecommendation {
+  provider: string;
+  model: string;
+  purpose: string;
+  subnet?: number;
+  exampleInput?: Record<string, unknown>;
+}
+
+export interface HubRouteResponse {
+  goal: string;
+  matchedIntent: string;
+  strategy: string;
+  recommendations: HubRecommendation[];
+  taostatsFollowups: QueryRequest[];
+  notes: string[];
 }
 
 export interface TaostatsPagination {

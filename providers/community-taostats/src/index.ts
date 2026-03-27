@@ -7,13 +7,14 @@
 
 import express from 'express';
 import cors from 'cors';
-import { loadConfig, getRequestCost, isEndpointAllowed, getAllowedEndpoints } from './config.js';
+import { loadConfig, getRequestCost, getHubRouteCost, isEndpointAllowed, getAllowedEndpoints } from './config.js';
 import { DrainService } from './drain.js';
 import { VoucherStorage } from './storage.js';
 import { getPaymentHeaders } from './constants.js';
 import { TaostatsService } from './taostats.js';
 import { formatUnits } from 'viem';
-import type { QueryRequest } from './types.js';
+import type { QueryRequest, HubRouteRequest } from './types.js';
+import { resolveHubIntent } from './hub.js';
 
 const config = loadConfig();
 
@@ -25,8 +26,10 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-const cost = getRequestCost(config);
-const priceStr = formatUnits(cost, 6);
+const queryCost = getRequestCost(config);
+const hubRouteCost = getHubRouteCost(config);
+const priceStr = formatUnits(queryCost, 6);
+const hubRoutePriceStr = formatUnits(hubRouteCost, 6);
 
 app.get('/v1/pricing', (_req, res) => {
   res.json({
@@ -44,6 +47,12 @@ app.get('/v1/pricing', (_req, res) => {
         outputPer1kTokens: '0',
         description: 'Query the Taostats API for Bittensor ecosystem data (price, metagraph, subnets, validators, miners, staking, etc.)',
       },
+      'bittensor/hub-router': {
+        pricePerRequest: hubRoutePriceStr,
+        inputPer1kTokens: hubRoutePriceStr,
+        outputPer1kTokens: '0',
+        description: 'Route an agent task to the best Bittensor subnet/provider path with concrete endpoint recommendations.',
+      },
     },
   });
 });
@@ -51,13 +60,22 @@ app.get('/v1/pricing', (_req, res) => {
 app.get('/v1/models', (_req, res) => {
   res.json({
     object: 'list',
-    data: [{
-      id: 'taostats/query',
-      object: 'model',
-      created: Date.now(),
-      owned_by: 'taostats',
-      description: 'Query any Taostats API endpoint for Bittensor ecosystem data. 60+ endpoints covering price, metagraph, subnets, validators, miners, staking, liquidity, EVM, and more.',
-    }],
+    data: [
+      {
+        id: 'taostats/query',
+        object: 'model',
+        created: Date.now(),
+        owned_by: 'taostats',
+        description: 'Query any Taostats API endpoint for Bittensor ecosystem data. 60+ endpoints covering price, metagraph, subnets, validators, miners, staking, liquidity, EVM, and more.',
+      },
+      {
+        id: 'bittensor/hub-router',
+        object: 'model',
+        created: Date.now(),
+        owned_by: 'handshake58',
+        description: 'Task router for Bittensor: suggests best subnet/provider path and ready-to-use next actions.',
+      },
+    ],
   });
 });
 
@@ -66,22 +84,29 @@ app.get('/v1/docs', (_req, res) => {
 
 This is a NON-STANDARD provider. It returns Bittensor ecosystem data from the Taostats API, not LLM chat.
 
-## Model: taostats/query
+## Models
+- taostats/query
+- bittensor/hub-router
 
 ## How to Use
 
 1. Open a payment channel: drain_open_channel to this provider
 2. Call drain_chat with:
-   - model: "taostats/query"
+   - model: "taostats/query" OR "bittensor/hub-router"
    - messages: ONE user message containing a JSON object (NOT natural language)
 
 ## Request Format
 
 The user message must be a JSON object with:
-- endpoint (string, required): The Taostats API path without /api/ prefix and /v1 suffix
-- params (object, optional): Query parameters as key-value pairs
+- For taostats/query:
+  - endpoint (string, required): Taostats path without /api/ prefix and /v1 suffix
+  - params (object, optional): query parameters
+  - Example: {"endpoint": "metagraph/latest", "params": {"netuid": 58, "limit": 5}}
 
-Example: {"endpoint": "metagraph/latest", "params": {"netuid": 58, "limit": 5}}
+- For bittensor/hub-router:
+  - intent (string, required): what the agent/user wants (e.g. "maximize sn13 emissions")
+  - constraints (object, optional): budget, speed, reliability, subnet preference
+  - Example: {"intent": "route me to best provider for social data and tao analytics", "constraints": {"priority": "reliability"}}
 
 This calls: GET https://api.taostats.io/api/metagraph/latest/v1?netuid=58&limit=5
 
@@ -189,6 +214,11 @@ drain_chat parameters:
   model: "taostats/query"
   messages: [{"role": "user", "content": "{\\"endpoint\\": \\"price/latest\\", \\"params\\": {\\"asset\\": \\"tao\\", \\"limit\\": 1}}"}]
 
+### Route a user objective to the best subnet/provider path
+drain_chat parameters:
+  model: "bittensor/hub-router"
+  messages: [{"role": "user", "content": "{\\"intent\\": \\"I need SN13 social data and then discover high uptime providers on SN58\\", \\"constraints\\": {\\"priority\\": \\"reliability\\"}}"}]
+
 ### Get subnet 58 metagraph (top 10 by stake)
 drain_chat parameters:
   model: "taostats/query"
@@ -220,9 +250,9 @@ drain_chat parameters:
  * POST /v1/chat/completions
  *
  * DRAIN-wrapped Taostats query:
- * - model = "taostats/query"
- * - last user message = JSON with { endpoint, params }
- * - response = raw Taostats API JSON as assistant message
+ * - model = "taostats/query" or "bittensor/hub-router"
+ * - taostats/query => JSON with { endpoint, params }
+ * - bittensor/hub-router => JSON with { intent, constraints? }
  */
 app.post('/v1/chat/completions', async (req, res) => {
   const voucherHeader = req.headers['x-drain-voucher'] as string;
@@ -238,8 +268,8 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 
   const modelId = req.body.model as string;
-  if (modelId !== 'taostats/query') {
-    res.status(400).json({ error: { message: `Model "${modelId}" not available. Use "taostats/query".` } });
+  if (modelId !== 'taostats/query' && modelId !== 'bittensor/hub-router') {
+    res.status(400).json({ error: { message: `Model "${modelId}" not available. Use "taostats/query" or "bittensor/hub-router".` } });
     return;
   }
 
@@ -263,46 +293,58 @@ app.post('/v1/chat/completions', async (req, res) => {
     return;
   }
 
-  if (!queryReq.endpoint || typeof queryReq.endpoint !== 'string') {
-    res.status(400).json({
-      error: { message: 'Missing "endpoint" field. Example: {"endpoint": "price/latest", "params": {"asset": "tao"}}' },
-    });
-    return;
-  }
-
-  const endpoint = queryReq.endpoint.replace(/^\/+|\/+$/g, '');
-
-  if (!isEndpointAllowed(endpoint)) {
-    res.status(400).json({
-      error: {
-        message: `Endpoint "${endpoint}" is not available. See /v1/docs for the full list of supported endpoints.`,
-        hint: 'Use endpoints like: price/latest, metagraph/latest, subnet/latest, validator/metrics/latest',
-      },
-    });
-    return;
-  }
-
-  const validation = await drainService.validateVoucher(voucher, cost);
+  const requestCost = modelId === 'bittensor/hub-router' ? hubRouteCost : queryCost;
+  const validation = await drainService.validateVoucher(voucher, requestCost);
   if (!validation.valid) {
     res.status(402).json({
       error: { message: `Voucher error: ${validation.error}` },
-      ...(validation.error === 'insufficient_funds' && { required: cost.toString() }),
+      ...(validation.error === 'insufficient_funds' && { required: requestCost.toString() }),
     });
     return;
   }
 
   try {
-    const taostatsResponse = await taostatsService.query(endpoint, queryReq.params ?? {});
+    let content: string;
 
-    const content = JSON.stringify(taostatsResponse);
+    if (modelId === 'bittensor/hub-router') {
+      const hubReq = queryReq as unknown as HubRouteRequest;
+      const routed = resolveHubIntent(
+        hubReq.goal ?? '',
+        hubReq.constraints ?? {},
+        hubReq.preferredSubnets ?? []
+      );
+      content = JSON.stringify(routed);
+    } else {
+      if (!queryReq.endpoint || typeof queryReq.endpoint !== 'string') {
+        res.status(400).json({
+          error: { message: 'Missing "endpoint" field. Example: {"endpoint": "price/latest", "params": {"asset": "tao"}}' },
+        });
+        return;
+      }
 
-    drainService.storeVoucher(voucher, validation.channel!, cost);
+      const endpoint = queryReq.endpoint.replace(/^\/+|\/+$/g, '');
 
-    const totalCharged = validation.channel!.totalCharged + cost;
+      if (!isEndpointAllowed(endpoint)) {
+        res.status(400).json({
+          error: {
+            message: `Endpoint "${endpoint}" is not available. See /v1/docs for the full list of supported endpoints.`,
+            hint: 'Use endpoints like: price/latest, metagraph/latest, subnet/latest, validator/metrics/latest',
+          },
+        });
+        return;
+      }
+
+      const taostatsResponse = await taostatsService.query(endpoint, queryReq.params ?? {});
+      content = JSON.stringify(taostatsResponse);
+    }
+
+    drainService.storeVoucher(voucher, validation.channel!, requestCost);
+
+    const totalCharged = validation.channel!.totalCharged + requestCost;
     const remaining = validation.channel!.deposit - totalCharged;
 
     res.set({
-      'X-DRAIN-Cost': cost.toString(),
+      'X-DRAIN-Cost': requestCost.toString(),
       'X-DRAIN-Total': totalCharged.toString(),
       'X-DRAIN-Remaining': remaining.toString(),
       'X-DRAIN-Channel': voucher.channelId,
@@ -322,7 +364,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     });
 
   } catch (error: any) {
-    console.error(`[taostats] Query error for ${endpoint}:`, error.message);
+    console.error(`[taostats] Query error for ${modelId}:`, error.message);
     res.status(502).json({
       error: { message: `Taostats query failed: ${error.message?.slice(0, 300)}` },
     });
@@ -388,7 +430,7 @@ app.get('/health', async (_req, res) => {
     providerName: config.providerName,
     taostatsApi: config.taostatsApiUrl,
     taostatsOnline: healthy,
-    models: ['taostats/query'],
+    models: ['taostats/query', 'bittensor/hub-router'],
     endpoints: getAllowedEndpoints().length,
     chainId: config.chainId,
   });
