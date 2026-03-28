@@ -1,7 +1,7 @@
 {
-  "name": "@handshake58/hs58-opsguard",
+  "name": "@handshake58/mozart-observability",
   "version": "0.1.0",
-  "description": "HS58-Opsguard — budget-aware provider quotes, routing, and failover planning via DRAIN",
+  "description": "Mozart-Observability — provider status, rankings, and route planning via DRAIN",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "build": "tsup src/index.ts --format esm",
     "start": "node dist/index.js"
   },
-  "keywords": ["drain", "handshake58", "routing", "budget", "failover", "bittensor", "micropayments"],
+  "keywords": ["drain", "handshake58", "observability", "routing", "bittensor", "micropayments"],
   "author": "Handshake58",
   "license": "MIT",
   "dependencies": {

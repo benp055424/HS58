@@ -1,4 +1,4 @@
-# HS58-SubnetPulse
+# Mozart-SubnetPulse
 
 DRAIN micropayment provider for subnet, validator, and miner signal routing on Handshake58.
 
@@ -57,4 +57,4 @@ npm start
 
 Deploy on Railway with root directory:
 
-`/providers/hs58-subnetpulse`
+`/providers/mozart-subnetpulse`

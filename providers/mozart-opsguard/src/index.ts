@@ -79,7 +79,7 @@ app.get('/v1/models', (_req, res) => {
       id,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
-      owned_by: 'hs58-opsguard',
+      owned_by: 'mozart-opsguard',
     })),
   });
 });
@@ -88,7 +88,7 @@ app.get('/v1/docs', (_req, res) => {
   const pQuote = formatUnits(getModelPricing('opsguard/provider-quote')!.inputPer1k, 6);
   const pBudget = formatUnits(getModelPricing('opsguard/budget-route')!.inputPer1k, 6);
   const pFailover = formatUnits(getModelPricing('opsguard/failover-plan')!.inputPer1k, 6);
-  res.type('text/plain').send(`# HS58-Opsguard — Agent Instructions
+  res.type('text/plain').send(`# Mozart-Opsguard — Agent Instructions
 
 This is NOT a chat/LLM provider. It returns provider-selection intelligence for cost control and resilience.
 

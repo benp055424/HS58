@@ -1,4 +1,4 @@
-# HS58-Observability
+# Mozart-Observability
 
 DRAIN micropayment provider for monitoring the Handshake58 marketplace and planning provider routing decisions.
 
@@ -57,4 +57,4 @@ npm start
 
 Deploy on Railway with root directory:
 
-`/providers/hs58-observability`
+`/providers/mozart-observability`

@@ -68,7 +68,7 @@ export function loadConfig(): ProviderConfig {
     pricing: activeModels,
     claimThreshold: BigInt(optionalEnv('CLAIM_THRESHOLD', '1000000')),
     storagePath: optionalEnv('STORAGE_PATH', './data/vouchers.json'),
-    providerName: optionalEnv('PROVIDER_NAME', 'HS58-Observability'),
+    providerName: optionalEnv('PROVIDER_NAME', 'Mozart-Observability'),
     autoClaimIntervalMinutes: parseInt(optionalEnv('AUTO_CLAIM_INTERVAL_MINUTES', '10')),
     autoClaimBufferSeconds: parseInt(optionalEnv('AUTO_CLAIM_BUFFER_SECONDS', '3600')),
   };

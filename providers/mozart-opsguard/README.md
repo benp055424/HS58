@@ -1,4 +1,4 @@
-# HS58-Opsguard
+# Mozart-Opsguard
 
 DRAIN micropayment provider for budget-aware provider selection and failover planning on Handshake58.
 
@@ -57,4 +57,4 @@ npm start
 
 Deploy on Railway with root directory:
 
-`/providers/hs58-opsguard`
+`/providers/mozart-opsguard`

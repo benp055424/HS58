@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
+import { formatUnits } from 'viem';
 import { loadConfig, getModelPricing, isModelSupported, getSupportedModels } from './config.js';
 import { DrainService } from './drain.js';
 import { VoucherStorage } from './storage.js';
-import { formatUnits } from 'viem';
 import { toolRegistry } from './tools.js';
 
 const config = loadConfig();
@@ -52,11 +52,11 @@ app.get('/v1/pricing', (_req, res) => {
     models[id] = {
       inputPer1kTokens: formatUnits(p.inputPer1k, 6),
       outputPer1kTokens: '0',
-      description: id === 'observability/provider-status'
-        ? 'Check provider health and model coverage by provider name or category'
-        : id === 'observability/provider-ranking'
-          ? 'Rank providers by score, quality, uptime, and pricing signals'
-          : 'Generate a route plan for a multi-step agent workflow across providers',
+      description: id === 'subnetpulse/subnet-brief'
+        ? 'Build a subnet-focused provider brief for a target netuid/theme.'
+        : id === 'subnetpulse/validator-route'
+          ? 'Build validator-oriented execution routes with score/latency balance.'
+          : 'Build miner-oriented data/ops routes with failover options.',
     };
   }
 
@@ -66,8 +66,8 @@ app.get('/v1/pricing', (_req, res) => {
     chainId: config.chainId,
     currency: 'USDC',
     decimals: 6,
-    type: 'bittensor-observability',
-    note: 'Observability and routing intelligence for Handshake58 provider operations.',
+    type: 'bittensor-subnetpulse',
+    note: 'Subnet routing and provider discovery intelligence for Handshake58.',
     models,
   });
 });
@@ -79,23 +79,23 @@ app.get('/v1/models', (_req, res) => {
       id,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
-      owned_by: 'hs58-observability',
+      owned_by: 'mozart-subnetpulse',
     })),
   });
 });
 
 app.get('/v1/docs', (_req, res) => {
-  const pStatus = formatUnits(getModelPricing('observability/provider-status')!.inputPer1k, 6);
-  const pRanking = formatUnits(getModelPricing('observability/provider-ranking')!.inputPer1k, 6);
-  const pPlan = formatUnits(getModelPricing('observability/route-plan')!.inputPer1k, 6);
-  res.type('text/plain').send(`# HS58-Observability — Agent Instructions
+  const pBrief = formatUnits(getModelPricing('subnetpulse/subnet-brief')!.inputPer1k, 6);
+  const pValidatorRoute = formatUnits(getModelPricing('subnetpulse/validator-route')!.inputPer1k, 6);
+  const pMinerRoute = formatUnits(getModelPricing('subnetpulse/miner-route')!.inputPer1k, 6);
+  res.type('text/plain').send(`# Mozart-Subnetpulse — Agent Instructions
 
-This is NOT a chat/LLM provider. It returns operational intelligence for Handshake58 providers.
+This is NOT a chat/LLM provider. It returns routing and discovery intelligence from live Handshake58 provider data.
 
 ## Models
-- observability/provider-status ($${pStatus})
-- observability/provider-ranking ($${pRanking})
-- observability/route-plan ($${pPlan})
+- subnetpulse/subnet-brief ($${pBrief})
+- subnetpulse/validator-route ($${pValidatorRoute})
+- subnetpulse/miner-route ($${pMinerRoute})
 
 ## How to use via DRAIN
 1. Open a payment channel to this provider (drain_open_channel)
@@ -105,41 +105,48 @@ This is NOT a chat/LLM provider. It returns operational intelligence for Handsha
 
 ## Input Formats
 
-### observability/provider-status
+### subnetpulse/subnet-brief
 {
-  "category": "data",               // optional category filter
-  "tier": "community",              // optional tier filter
-  "minScore": 0.5,                  // optional score filter
-  "marketplaceUrl": "https://handshake58.com", // optional override
-  "limit": 50                       // optional, default 100, max 200
+  "modelHint": "taostats",                 // optional model hint
+  "category": "data",                      // optional filter
+  "protocol": "drain",                     // optional: drain | mpp | x402 | all
+  "maxProviders": 10,                      // optional, default 10, max 25
+  "marketplaceUrl": "https://handshake58.com" // optional override
 }
 
-### observability/provider-ranking
+### subnetpulse/validator-route
 {
-  "category": "data",               // optional category filter
-  "marketplaceUrl": "https://handshake58.com", // optional override
-  "limit": 10,                      // optional, default 25, max 100
-  "sortBy": "quality"               // optional: score | quality | latency | models
+  "modelHint": "validator",                // required
+  "quoteUsd": 0.5,                         // optional, default 0.5
+  "maxProviders": 6,                       // optional, default 6, max 20
+  "category": "data",                      // optional filter
+  "protocol": "drain",                     // optional: drain | mpp | x402 | all
+  "marketplaceUrl": "https://handshake58.com" // optional override
 }
 
-### observability/route-plan
+### subnetpulse/miner-route
 {
-  "goal": "scrape TAO sentiment then summarize with top reliability model", // required
+  "modelHint": "taostats",                 // required
+  "maxBackups": 3,                         // optional, default 3, max 6
+  "maxBudgetUsd": 0.03,                    // optional, default 0.03
+  "failureThreshold": 2,                   // optional, default 2
+  "rotationWindowSeconds": 120,            // optional, default 120
+  "category": "data",                      // optional filter
+  "protocol": "drain",                     // optional: drain | mpp | x402 | all
   "marketplaceUrl": "https://handshake58.com" // optional override
 }
 
 ## Response
-Assistant content is JSON string with analysis results and recommended next actions.
+Assistant content is JSON string with ranked providers and actionable routing output.
 
-## Data source
+## Data Source
 Live reads from:
 - https://handshake58.com/api/mcp/providers
-- https://handshake58.com/api/directory/providers
 
 ## Notes
 - Rate limit: ${config.rateLimitPerMinute} req/min per channel
-- Uses short cache windows to reduce marketplace load
-- For execution, use recommended provider/model with drain_open_channel + drain_chat
+- Routing signals blend affordability + quality + latency
+- Validate downstream provider docs before production routing
 `);
 });
 
@@ -183,7 +190,6 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   const pricing = getModelPricing(model)!;
   const cost = pricing.inputPer1k;
-
   const validation = await drainService.validateVoucher(voucher, cost);
   if (!validation.valid) {
     const headers: Record<string, string> = { 'X-DRAIN-Error': validation.error! };
@@ -198,10 +204,8 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 
   const channelState = validation.channel!;
-
   const messages = req.body.messages as Array<{ role: string; content: string }> | undefined;
   const input = messages?.filter(m => m.role === 'user').pop()?.content ?? '';
-
   const handler = toolRegistry.get(model);
   if (!handler) {
     res.status(500).json({ error: { message: `Handler not found for ${model}` } });
@@ -225,7 +229,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     'X-DRAIN-Remaining': remaining.toString(),
     'X-DRAIN-Channel': voucher.channelId,
   }).json({
-    id: `observability-${Date.now()}`,
+    id: `subnetpulse-${Date.now()}`,
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model,
