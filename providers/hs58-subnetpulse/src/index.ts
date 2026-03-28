@@ -52,11 +52,11 @@ app.get('/v1/pricing', (_req, res) => {
     models[id] = {
       inputPer1kTokens: formatUnits(p.inputPer1k, 6),
       outputPer1kTokens: '0',
-      description: id === 'subnetpulse/subnet-overview'
-        ? 'Snapshot subnet/category/tier coverage and online posture across providers.'
-        : id === 'subnetpulse/validator-miner-rank'
-          ? 'Estimate validator/miner-adjacent provider options by cost, latency, and quality.'
-          : 'Generate rotation plans with primary + backup provider chains.',
+      description: id === 'subnetpulse/subnet-brief'
+        ? 'Build a subnet-focused provider brief for a target netuid/theme.'
+        : id === 'subnetpulse/validator-route'
+          ? 'Build validator-oriented execution routes with score/latency balance.'
+          : 'Build miner-oriented data/ops routes with failover options.',
     };
   }
 
@@ -85,17 +85,17 @@ app.get('/v1/models', (_req, res) => {
 });
 
 app.get('/v1/docs', (_req, res) => {
-  const pOverview = formatUnits(getModelPricing('subnetpulse/subnet-overview')!.inputPer1k, 6);
-  const pRank = formatUnits(getModelPricing('subnetpulse/validator-miner-rank')!.inputPer1k, 6);
-  const pRotation = formatUnits(getModelPricing('subnetpulse/emission-rotation')!.inputPer1k, 6);
+  const pBrief = formatUnits(getModelPricing('subnetpulse/subnet-brief')!.inputPer1k, 6);
+  const pValidatorRoute = formatUnits(getModelPricing('subnetpulse/validator-route')!.inputPer1k, 6);
+  const pMinerRoute = formatUnits(getModelPricing('subnetpulse/miner-route')!.inputPer1k, 6);
   res.type('text/plain').send(`# HS58-Subnetpulse — Agent Instructions
 
 This is NOT a chat/LLM provider. It returns routing and discovery intelligence from live Handshake58 provider data.
 
 ## Models
-- subnetpulse/subnet-overview ($${pOverview})
-- subnetpulse/validator-miner-rank ($${pRank})
-- subnetpulse/emission-rotation ($${pRotation})
+- subnetpulse/subnet-brief ($${pBrief})
+- subnetpulse/validator-route ($${pValidatorRoute})
+- subnetpulse/miner-route ($${pMinerRoute})
 
 ## How to use via DRAIN
 1. Open a payment channel to this provider (drain_open_channel)
@@ -105,7 +105,7 @@ This is NOT a chat/LLM provider. It returns routing and discovery intelligence f
 
 ## Input Formats
 
-### subnetpulse/subnet-overview
+### subnetpulse/subnet-brief
 {
   "modelHint": "taostats",                 // optional model hint
   "category": "data",                      // optional filter
@@ -114,7 +114,7 @@ This is NOT a chat/LLM provider. It returns routing and discovery intelligence f
   "marketplaceUrl": "https://handshake58.com" // optional override
 }
 
-### subnetpulse/validator-miner-rank
+### subnetpulse/validator-route
 {
   "modelHint": "validator",                // required
   "quoteUsd": 0.5,                         // optional, default 0.5
@@ -124,7 +124,7 @@ This is NOT a chat/LLM provider. It returns routing and discovery intelligence f
   "marketplaceUrl": "https://handshake58.com" // optional override
 }
 
-### subnetpulse/emission-rotation
+### subnetpulse/miner-route
 {
   "modelHint": "taostats",                 // required
   "maxBackups": 3,                         // optional, default 3, max 6
