@@ -1,18 +1,9 @@
 /**
  * Voucher Storage — JSON file storage for vouchers.
  */
-
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
-import type { StoredVoucher, ChannelState } from './types.js';
-import type { Hash } from 'viem';
-
-interface StorageData {
-  vouchers: StoredVoucher[];
-  channels: Record<string, ChannelState>;
-  totalEarned: string;
-  totalClaimed: string;
-}
+import type { StoredVoucher, ChannelState, StorageData } from './types.js';
 
 export class VoucherStorage {
   private filePath: string;
@@ -49,7 +40,7 @@ export class VoucherStorage {
     }
   }
 
-  private save(): void {
+  private save() {
     const dir = dirname(this.filePath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     const serializable = {
@@ -61,22 +52,19 @@ export class VoucherStorage {
           deposit: ch.deposit.toString(),
           totalCharged: ch.totalCharged.toString(),
           lastVoucher: ch.lastVoucher ? { ...ch.lastVoucher, amount: ch.lastVoucher.amount.toString(), nonce: ch.lastVoucher.nonce.toString() } : undefined,
-        }])
+        }]),
       ),
     };
     writeFileSync(this.filePath, JSON.stringify(serializable, null, 2));
   }
 
-  storeVoucher(voucher: StoredVoucher): void { this.data.vouchers.push(voucher); this.save(); }
+  storeVoucher(voucher: StoredVoucher) { this.data.vouchers.push(voucher); this.save(); }
+  getChannel(channelId: string): ChannelState | null { return this.data.channels[channelId] ?? null; }
+  updateChannel(channelId: string, state: ChannelState) { this.data.channels[channelId] = state; this.save(); }
+  getUnclaimedVouchers() { return this.data.vouchers.filter(v => !v.claimed); }
 
-  getChannel(channelId: Hash): ChannelState | null { return this.data.channels[channelId.toLowerCase()] ?? null; }
-
-  updateChannel(channelId: Hash, state: ChannelState): void { this.data.channels[channelId.toLowerCase()] = state; this.save(); }
-
-  getUnclaimedVouchers(): StoredVoucher[] { return this.data.vouchers.filter(v => !v.claimed); }
-
-  getHighestVoucherPerChannel(): Map<Hash, StoredVoucher> {
-    const highest = new Map<Hash, StoredVoucher>();
+  getHighestVoucherPerChannel(): Map<string, StoredVoucher> {
+    const highest = new Map<string, StoredVoucher>();
     for (const voucher of this.data.vouchers) {
       if (voucher.claimed) continue;
       const existing = highest.get(voucher.channelId);
@@ -85,10 +73,12 @@ export class VoucherStorage {
     return highest;
   }
 
-  markClaimed(channelId: Hash, txHash: Hash): void {
+  markClaimed(channelId: string, txHash: string) {
     for (const v of this.data.vouchers) {
       if (v.channelId === channelId && !v.claimed) {
-        v.claimed = true; v.claimedAt = Date.now(); v.claimTxHash = txHash;
+        v.claimed = true;
+        v.claimedAt = Date.now();
+        v.claimTxHash = txHash;
       }
     }
     this.save();

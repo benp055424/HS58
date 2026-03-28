@@ -1,28 +1,18 @@
 /**
  * DRAIN Integration
- * 
+ *
  * Handles voucher validation and payment claims.
  */
-
 import {
-  createPublicClient,
-  createWalletClient,
-  http,
-  verifyTypedData,
-  type Hash,
-  type Hex,
-  type Address,
+  createPublicClient, createWalletClient, http, verifyTypedData,
 } from 'viem';
 import { polygon, polygonAmoy } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
-  DRAIN_ADDRESSES,
-  DRAIN_CHANNEL_ABI,
-  EIP712_DOMAIN,
-  PERMANENT_CLAIM_ERRORS,
+  DRAIN_ADDRESSES, DRAIN_CHANNEL_ABI, EIP712_DOMAIN, PERMANENT_CLAIM_ERRORS,
 } from './constants.js';
-import type { ProviderConfig, VoucherHeader, StoredVoucher, ChannelState } from './types.js';
-import { VoucherStorage } from './storage.js';
+import type { Voucher, ChannelState, ProviderConfig } from './types.js';
+import type { VoucherStorage } from './storage.js';
 
 export class DrainService {
   private config: ProviderConfig;
@@ -30,58 +20,49 @@ export class DrainService {
   private publicClient;
   private walletClient;
   private account;
-  private contractAddress: Address;
+  private contractAddress: `0x${string}`;
 
   constructor(config: ProviderConfig, storage: VoucherStorage) {
     this.config = config;
     this.storage = storage;
-
     const chain = config.chainId === 137 ? polygon : polygonAmoy;
     const rpcUrl = config.polygonRpcUrl;
-    
     this.publicClient = createPublicClient({
       chain,
       transport: http(rpcUrl),
     });
-
     this.account = privateKeyToAccount(config.providerPrivateKey);
-    
     this.walletClient = createWalletClient({
       account: this.account,
       chain,
       transport: http(rpcUrl),
     });
-
     if (rpcUrl) {
       console.log(`[drain] Using custom RPC: ${rpcUrl.replace(/\/[^/]{8,}$/, '/***')}`);
     } else {
       console.warn('[drain] WARNING: No POLYGON_RPC_URL set, using public RPC (rate-limited). Set POLYGON_RPC_URL for reliable claiming.');
     }
-
-    this.contractAddress = DRAIN_ADDRESSES[config.chainId] as Address;
+    this.contractAddress = DRAIN_ADDRESSES[config.chainId];
   }
 
-  parseVoucherHeader(header: string): VoucherHeader | null {
+  parseVoucherHeader(header: string): Voucher | null {
     try {
       const parsed = JSON.parse(header);
       if (!parsed.channelId || !parsed.amount || !parsed.nonce || !parsed.signature) {
         return null;
       }
       return {
-        channelId: (parsed.channelId as string).toLowerCase() as Hash,
+        channelId: parsed.channelId,
         amount: parsed.amount,
         nonce: parsed.nonce,
-        signature: parsed.signature as Hex,
+        signature: parsed.signature,
       };
     } catch {
       return null;
     }
   }
 
-  async validateVoucher(
-    voucher: VoucherHeader,
-    requiredAmount: bigint
-  ): Promise<{
+  async validateVoucher(voucher: Voucher, requiredAmount: bigint): Promise<{
     valid: boolean;
     error?: string;
     channel?: ChannelState;
@@ -90,24 +71,21 @@ export class DrainService {
     try {
       const amount = BigInt(voucher.amount);
       const nonce = BigInt(voucher.nonce);
-
       const channelData = await this.publicClient.readContract({
         address: this.contractAddress,
         abi: DRAIN_CHANNEL_ABI,
         functionName: 'getChannel',
-        args: [voucher.channelId],
-      }) as any;
+        args: [voucher.channelId as `0x${string}`],
+      });
 
       if (channelData.consumer === '0x0000000000000000000000000000000000000000') {
         return { valid: false, error: 'channel_not_found' };
       }
-
       if (channelData.provider.toLowerCase() !== this.account.address.toLowerCase()) {
         return { valid: false, error: 'wrong_provider' };
       }
 
       let channelState = this.storage.getChannel(voucher.channelId);
-      
       if (!channelState) {
         channelState = {
           channelId: voucher.channelId,
@@ -124,15 +102,12 @@ export class DrainService {
 
       const previousTotal = channelState.totalCharged;
       const expectedTotal = previousTotal + requiredAmount;
-      
       if (amount < expectedTotal) {
         return { valid: false, error: 'insufficient_funds', channel: channelState };
       }
-
       if (amount > channelData.deposit) {
         return { valid: false, error: 'exceeds_deposit', channel: channelState };
       }
-
       if (channelState.lastVoucher && nonce <= channelState.lastVoucher.nonce) {
         return { valid: false, error: 'invalid_nonce', channel: channelState };
       }
@@ -154,11 +129,11 @@ export class DrainService {
         },
         primaryType: 'Voucher',
         message: {
-          channelId: voucher.channelId,
+          channelId: voucher.channelId as `0x${string}`,
           amount,
           nonce,
         },
-        signature: voucher.signature,
+        signature: voucher.signature as `0x${string}`,
       });
 
       if (!isValid) {
@@ -175,8 +150,8 @@ export class DrainService {
     }
   }
 
-  storeVoucher(voucher: VoucherHeader, channelState: ChannelState, cost: bigint): void {
-    const storedVoucher: StoredVoucher = {
+  storeVoucher(voucher: Voucher, channelState: ChannelState, cost: bigint) {
+    const storedVoucher = {
       channelId: voucher.channelId,
       amount: BigInt(voucher.amount),
       nonce: BigInt(voucher.nonce),
@@ -185,36 +160,36 @@ export class DrainService {
       receivedAt: Date.now(),
       claimed: false,
     };
-
     channelState.totalCharged += cost;
     channelState.lastVoucher = storedVoucher;
     channelState.lastActivityAt = Date.now();
-
     this.storage.storeVoucher(storedVoucher);
     this.storage.updateChannel(voucher.channelId, channelState);
   }
 
-  async claimPayments(forceAll: boolean = false): Promise<Hash[]> {
-    const txHashes: Hash[] = [];
+  async claimPayments(forceAll = false): Promise<string[]> {
+    const txHashes: string[] = [];
     const highest = this.storage.getHighestVoucherPerChannel();
-
     for (const [channelId, voucher] of highest) {
       if (!forceAll && voucher.amount < this.config.claimThreshold) continue;
-
       try {
         const balance = await this.getChannelBalance(voucher.channelId);
         if (balance === 0n) {
-          this.storage.markClaimed(channelId, '0x0' as Hash);
+          this.storage.markClaimed(channelId, '0x0');
           continue;
         }
       } catch { /* proceed with claim */ }
-
       try {
         const hash = await this.walletClient.writeContract({
           address: this.contractAddress,
           abi: DRAIN_CHANNEL_ABI,
           functionName: 'claim',
-          args: [voucher.channelId, voucher.amount, voucher.nonce, voucher.signature],
+          args: [
+            voucher.channelId as `0x${string}`,
+            voucher.amount,
+            voucher.nonce,
+            voucher.signature as `0x${string}`,
+          ],
         });
         this.storage.markClaimed(channelId, hash);
         txHashes.push(hash);
@@ -226,45 +201,47 @@ export class DrainService {
     return txHashes;
   }
 
-  getProviderAddress(): Address {
+  getProviderAddress(): string {
     return this.account.address;
   }
 
-  async getChannelBalance(channelId: Hash): Promise<bigint> {
+  async getChannelBalance(channelId: string): Promise<bigint> {
     return await this.publicClient.readContract({
       address: this.contractAddress,
       abi: DRAIN_CHANNEL_ABI,
       functionName: 'getBalance',
-      args: [channelId],
-    }) as bigint;
+      args: [channelId as `0x${string}`],
+    });
   }
 
-  async claimExpiring(bufferSeconds: number = 3600): Promise<Hash[]> {
-    const txHashes: Hash[] = [];
+  async claimExpiring(bufferSeconds = 3600): Promise<string[]> {
+    const txHashes: string[] = [];
     const highest = this.storage.getHighestVoucherPerChannel();
     const now = Math.floor(Date.now() / 1000);
-
     for (const [channelId, voucher] of highest) {
       const channel = this.storage.getChannel(channelId);
       if (!channel || !channel.expiry) continue;
       const timeLeft = channel.expiry - now;
       if (timeLeft > bufferSeconds) continue;
       if (voucher.amount <= 0n) continue;
-
       try {
         const balance = await this.getChannelBalance(voucher.channelId);
         if (balance === 0n) {
-          this.storage.markClaimed(channelId, '0x0' as Hash);
+          this.storage.markClaimed(channelId, '0x0');
           continue;
         }
       } catch { /* proceed */ }
-
       try {
         const hash = await this.walletClient.writeContract({
           address: this.contractAddress,
           abi: DRAIN_CHANNEL_ABI,
           functionName: 'claim',
-          args: [voucher.channelId, voucher.amount, voucher.nonce, voucher.signature],
+          args: [
+            voucher.channelId as `0x${string}`,
+            voucher.amount,
+            voucher.nonce,
+            voucher.signature as `0x${string}`,
+          ],
         });
         this.storage.markClaimed(channelId, hash);
         txHashes.push(hash);
@@ -278,7 +255,7 @@ export class DrainService {
 
   private autoClaimInterval: ReturnType<typeof setInterval> | null = null;
 
-  startAutoClaim(intervalMinutes: number = 10, bufferSeconds: number = 3600): void {
+  startAutoClaim(intervalMinutes = 10, bufferSeconds = 3600) {
     if (this.autoClaimInterval) return;
     console.log(`[auto-claim] Started: checking every ${intervalMinutes}min, claiming channels expiring within ${bufferSeconds / 60}min`);
     this.autoClaimInterval = setInterval(async () => {
@@ -292,47 +269,18 @@ export class DrainService {
     this.claimExpiring(bufferSeconds).catch(console.error);
   }
 
-  private handleClaimError(context: string, channelId: string, error: any): void {
+  private handleClaimError(context: string, channelId: string, error: any) {
     const errorName = error?.cause?.data?.errorName || error?.cause?.reason || undefined;
-    if (errorName && PERMANENT_CLAIM_ERRORS.includes(errorName as any)) {
+    if (errorName && PERMANENT_CLAIM_ERRORS.includes(errorName)) {
       console.error(`[${context}] ${channelId}: ${errorName} (permanent, marking failed)`);
-      this.storage.markClaimed(channelId as Hash, '0x0' as Hash);
+      this.storage.markClaimed(channelId, '0x0');
     } else {
       const shortMsg = error?.shortMessage || error?.message || 'unknown error';
       console.error(`[${context}] ${channelId}: ${shortMsg} (will retry)`);
     }
   }
 
-  /**
-   * Sign a close authorization for cooperative channel close.
-   * Returns the finalAmount (highest voucher or 0) and provider signature.
-   */
-  async signCloseAuthorization(channelId: Hash): Promise<{ finalAmount: bigint; signature: Hex }> {
-    const normalizedId = channelId.toLowerCase() as Hash;
-    const highest = this.storage.getHighestVoucherPerChannel().get(normalizedId);
-    const finalAmount = highest ? highest.amount : 0n;
-
-    const signature = await this.walletClient.signTypedData({
-      domain: {
-        name: EIP712_DOMAIN.name,
-        version: EIP712_DOMAIN.version,
-        chainId: this.config.chainId,
-        verifyingContract: this.contractAddress,
-      },
-      types: {
-        CloseAuthorization: [
-          { name: 'channelId', type: 'bytes32' },
-          { name: 'finalAmount', type: 'uint256' },
-        ],
-      },
-      primaryType: 'CloseAuthorization',
-      message: { channelId, finalAmount },
-    });
-
-    return { finalAmount, signature };
-  }
-
-  stopAutoClaim(): void {
+  stopAutoClaim() {
     if (this.autoClaimInterval) {
       clearInterval(this.autoClaimInterval);
       this.autoClaimInterval = null;

@@ -187,6 +187,135 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// --- Platform Stats (free, no DRAIN voucher) ---
+
+let platformStatsCache: { data: any; ts: number } | null = null;
+const PLATFORM_STATS_TTL = 5 * 60_000;
+
+app.get('/v1/platform-stats', async (_req, res) => {
+  if (platformStatsCache && Date.now() - platformStatsCache.ts < PLATFORM_STATS_TTL) {
+    res.json(platformStatsCache.data);
+    return;
+  }
+
+  const netuid = process.env.PLATFORM_NETUID || '58';
+
+  const [metagraphResult, healthResult, emissionsResult, subnetListResult] = await Promise.allSettled([
+    executeTool(
+      'agcli/subnet-metagraph',
+      JSON.stringify({ netuid: parseInt(netuid) }),
+      config.agcliPath, config.subtensorEndpoint,
+      config.agcliTimeoutRead, config.agcliTimeoutWrite,
+    ),
+    executeTool(
+      'agcli/subnet-health',
+      JSON.stringify({ netuid: parseInt(netuid) }),
+      config.agcliPath, config.subtensorEndpoint,
+      config.agcliTimeoutRead, config.agcliTimeoutWrite,
+    ),
+    executeTool(
+      'agcli/subnet-emissions',
+      JSON.stringify({ netuid: parseInt(netuid) }),
+      config.agcliPath, config.subtensorEndpoint,
+      config.agcliTimeoutRead, config.agcliTimeoutWrite,
+    ),
+    executeTool(
+      'agcli/subnet-list',
+      JSON.stringify({}),
+      config.agcliPath, config.subtensorEndpoint,
+      config.agcliTimeoutRead, config.agcliTimeoutWrite,
+    ),
+  ]);
+
+  let minerCount = 0;
+  let validatorCount = 0;
+  let avgIncentive = 0;
+  let totalStake = 0;
+  let topMiners: { uid: number; incentive: number }[] = [];
+
+  if (metagraphResult.status === 'fulfilled') {
+    try {
+      const mg = JSON.parse(metagraphResult.value);
+      const neurons = Array.isArray(mg) ? mg : mg.neurons || mg.data || [];
+      const validators = neurons.filter((n: any) => n.validator_permit || n.stake > 0);
+      const miners = neurons.filter((n: any) => !n.validator_permit && n.stake === 0);
+      minerCount = miners.length || neurons.length;
+      validatorCount = validators.length;
+
+      totalStake = neurons.reduce((s: number, n: any) => s + (Number(n.stake) || 0), 0);
+
+      const incentives = neurons.map((n: any) => n.incentive ?? 0).filter((v: number) => v > 0);
+      avgIncentive = incentives.length > 0
+        ? incentives.reduce((s: number, v: number) => s + v, 0) / incentives.length
+        : 0;
+
+      topMiners = neurons
+        .filter((n: any) => (n.incentive ?? 0) > 0)
+        .sort((a: any, b: any) => (b.incentive ?? 0) - (a.incentive ?? 0))
+        .slice(0, 5)
+        .map((n: any) => ({ uid: n.uid, incentive: n.incentive }));
+    } catch {}
+  }
+
+  let healthStatus = 'unknown';
+  if (healthResult.status === 'fulfilled') {
+    try {
+      const h = JSON.parse(healthResult.value);
+      if (h.status) healthStatus = h.status;
+      else if (h.healthy !== undefined) healthStatus = h.healthy ? 'healthy' : 'degraded';
+      else healthStatus = 'healthy';
+    } catch {}
+  }
+
+  let totalEmission = 0;
+  if (emissionsResult.status === 'fulfilled') {
+    try {
+      const e = JSON.parse(emissionsResult.value);
+      totalEmission = e.total_emission ?? e.emission ?? e.totalEmission ?? 0;
+    } catch {}
+  }
+
+  let tempo: number | null = null;
+  let regCost: number | null = null;
+  let maxN: number | null = null;
+  let immunityPeriod: number | null = null;
+
+  if (subnetListResult.status === 'fulfilled') {
+    try {
+      const list = JSON.parse(subnetListResult.value);
+      const subnets = Array.isArray(list) ? list : list.subnets || list.data || [];
+      const sn = subnets.find((s: any) =>
+        s.netuid === parseInt(netuid) || s.net_uid === parseInt(netuid) || s.id === parseInt(netuid)
+      );
+      if (sn) {
+        tempo = sn.tempo ?? sn.Tempo ?? null;
+        regCost = sn.reg_cost ?? sn.registration_cost ?? sn.regCost ?? sn.burn ?? null;
+        maxN = sn.max_n ?? sn.max_neurons ?? sn.maxN ?? null;
+        immunityPeriod = sn.immunity_period ?? sn.immunityPeriod ?? null;
+      }
+    } catch {}
+  }
+
+  const data = {
+    netuid: parseInt(netuid),
+    minerCount,
+    validatorCount,
+    avgIncentive: Math.round(avgIncentive * 10000) / 10000,
+    topMiners,
+    healthStatus,
+    totalEmission,
+    totalStake: Math.round(totalStake * 10000) / 10000,
+    tempo,
+    regCost,
+    maxN,
+    immunityPeriod,
+    timestamp: new Date().toISOString(),
+  };
+
+  platformStatsCache = { data, ts: Date.now() };
+  res.json(data);
+});
+
 app.post('/v1/chat/completions', async (req, res) => {
   const voucherHeader = req.headers['x-drain-voucher'] as string | undefined;
   if (!voucherHeader) {
