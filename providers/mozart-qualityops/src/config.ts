@@ -3,6 +3,7 @@ import type { ProviderConfig, ModelPricing } from './types.js';
 import type { Hex } from 'viem';
 
 config();
+console.log("[debug] process.env.PORT =", process.env.PORT);
 
 const requireEnv = (name: string): string => {
   const value = process.env[name];
