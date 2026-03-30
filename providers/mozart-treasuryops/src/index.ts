@@ -88,7 +88,7 @@ app.get('/v1/models', (_req, res) => {
       id,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
-      owned_by: 'treasuryops',
+      owned_by: 'mozart-treasuryops',
     })),
   });
 });
