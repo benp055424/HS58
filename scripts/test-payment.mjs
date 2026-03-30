@@ -36,9 +36,9 @@ const RPC_URL        = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
 const MARKETPLACE    = process.env.MARKETPLACE_URL  || 'https://handshake58.com';
 
 // DRAIN channel parameters
-const DEPOSIT_USDC   = '0.10';          // $0.10 per channel
+const DEPOSIT_USDC   = process.env.DEPOSIT_USDC || '0.10'; // $0.10 per channel (default)
 const DURATION_SEC   = 86400;           // 24 hours
-const VOUCHER_USDC   = '0.01';          // $0.01 per request
+const VOUCHER_USDC   = process.env.VOUCHER_USDC || '0.01'; // $0.01 per request (default)
 
 // ============================================================================
 // ABI fragments (only what we need)
@@ -216,7 +216,7 @@ function buildUserPayload(providerName, modelId) {
 
 function voucherAmountUsdForModel(modelId) {
   const model = String(modelId || '').toLowerCase();
-  if (model.startsWith('orchestra/')) return '0.10';
+  if (model.startsWith('orchestra/')) return process.env.ORCHESTRA_VOUCHER_USDC || '0.10';
   return VOUCHER_USDC;
 }
 
