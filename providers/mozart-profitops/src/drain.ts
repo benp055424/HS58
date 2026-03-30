@@ -188,7 +188,8 @@ export class DrainService {
       console.error('Voucher validation error:', error);
       return {
         valid: false,
-        error: error instanceof Error ? error.message : 'validation_error',
+        // Keep wire-level payment error codes stable and header-safe.
+        error: 'validation_error',
       };
     }
   }
