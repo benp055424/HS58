@@ -234,27 +234,19 @@ async function main() {
       const openTx = await drain.open(provAddress, depositWei, DURATION_SEC);
       const receipt = await waitForTx(openTx, 'channel open');
 
-      // Find ChannelOpened event
-      const iface = new ethers.Interface(DRAIN_ABI);
-      let channelId = null;
-      for (const log of receipt.logs) {
-        try {
-          const parsed = iface.parseLog({ topics: log.topics, data: log.data });
-          if (parsed?.name === 'ChannelOpened') {
-            channelId = parsed.args[0]; // first indexed param = channelId
-            break;
-          }
-        } catch { /* not our event */ }
+      // Channel ID is the first indexed topic on ChannelOpened.
+      // Prefer emitted logs over return/static values for compatibility.
+      const eventSig = '0x506f81b7a67b45bfbc6167fd087b3dd9b65b4531a2380ec406aab5b57ac62152';
+      const openedLog = receipt.logs.find(
+        (l) =>
+          l.address.toLowerCase() === DRAIN_CONTRACT.toLowerCase() &&
+          l.topics[0] === eventSig &&
+          l.topics.length >= 2
+      );
+      const channelId = openedLog?.topics[1];
+      if (!channelId || channelId === ethers.ZeroHash) {
+        throw new Error('ChannelOpened event not found in receipt');
       }
-
-      if (!channelId) {
-        // Fallback: look for topic
-        const eventSig = '0x506f81b7a67b45bfbc6167fd087b3dd9b65b4531a2380ec406aab5b57ac62152';
-        const openedLog = receipt.logs.find(l => l.topics[0] === eventSig);
-        channelId = openedLog?.topics[1];
-      }
-
-      if (!channelId) throw new Error('ChannelOpened event not found in receipt');
       
       console.log(`  Channel ID: ${channelId}`);
       result.channelId = channelId;
