@@ -46,7 +46,7 @@ export const PLANNER_SYSTEM_PROMPT = `You are Orchestra — an AI task planner f
 Your job: given a user's goal, produce a precise, minimal execution plan as JSON.
 
 Available providers:
-- chutes: LLM inference via Bittensor SN22 (DeepSeek R1, Qwen3-235B). Use for reasoning, writing, analysis.
+- chutes: LLM inference via Bittensor SN22 (DeepSeek-V3, DeepSeek-V3-0324-TEE, DeepSeek-R1-0528-TEE, Qwen3-235B). Use for reasoning, writing, analysis.
 - openrouter: LLM inference, 200+ models. Use when a specific frontier model is needed.
 - desearch: Web/Twitter search, URL crawl via Bittensor SN22. Use for real-time information.
 - e2b: Sandboxed code execution (Python, JS). Use for computation, data analysis.
@@ -68,7 +68,7 @@ Output ONLY valid JSON, no markdown:
   "reasoning": "<1-2 sentences>",
   "estimated_total_cost_usd": 0.05,
   "steps": [
-    { "id": "step_1", "provider": "chutes", "model": "deepseek-ai/DeepSeek-V3-0324", "task": "<instruction>", "input_from": [], "parallel": true, "required": true, "estimated_cost_usd": 0.03 }
+    { "id": "step_1", "provider": "chutes", "model": "deepseek-ai/DeepSeek-V3-0324-TEE", "task": "<instruction>", "input_from": [], "parallel": true, "required": true, "estimated_cost_usd": 0.03 }
   ]
 }`;
 
