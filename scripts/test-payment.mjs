@@ -214,6 +214,12 @@ function buildUserPayload(providerName, modelId) {
   return 'Say "Hello from Handshake58 test!" in exactly 5 words.';
 }
 
+function voucherAmountUsdForModel(modelId) {
+  const model = String(modelId || '').toLowerCase();
+  if (model.startsWith('orchestra/')) return '0.10';
+  return VOUCHER_USDC;
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
@@ -358,8 +364,9 @@ async function main() {
       console.log(`  Channel ID: ${channelId}`);
       result.channelId = channelId;
 
-      // b) Sign EIP-712 voucher
-      const voucherAmount = parseUSDC(VOUCHER_USDC);
+      // c) Sign EIP-712 voucher
+      const voucherUsd = voucherAmountUsdForModel(model?.modelId || model?.name);
+      const voucherAmount = parseUSDC(voucherUsd);
       const nonce = 0;
 
       const voucherMessage = {
@@ -368,7 +375,7 @@ async function main() {
         nonce: nonce,
       };
 
-      console.log(`  Signing voucher (${VOUCHER_USDC} USDC, nonce=${nonce})...`);
+      console.log(`  Signing voucher (${voucherUsd} USDC, nonce=${nonce})...`);
       const signature = await wallet.signTypedData(EIP712_DOMAIN, VOUCHER_TYPES, voucherMessage);
       console.log(`  Signature: ${signature.slice(0, 20)}...`);
 
