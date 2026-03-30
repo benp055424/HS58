@@ -107,6 +107,113 @@ async function waitForTx(tx, label = 'tx') {
   return receipt;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildUserPayload(providerName, modelId) {
+  const model = String(modelId || '').toLowerCase();
+  const name = String(providerName || '').toLowerCase();
+
+  if (model.startsWith('orchestra/')) {
+    return {
+      mode: 'auto',
+      goal: 'Provide a short operational summary for Mozart providers on Handshake58.',
+      budget_usd: 0.05,
+    };
+  }
+
+  if (model === 'catalogops/profile-audit') {
+    return { providerName: 'Mozart-Observability' };
+  }
+  if (model === 'catalogops/model-coverage') {
+    return { category: 'network', protocol: 'drain' };
+  }
+  if (model === 'catalogops/launch-readiness') {
+    return { providerName: 'Mozart-Opsguard', category: 'network' };
+  }
+
+  if (model === 'qualityops/listing-score') {
+    return { providerName: 'Mozart-Observability' };
+  }
+  if (model === 'qualityops/trust-check') {
+    return { providerName: 'Mozart-Observability' };
+  }
+  if (model === 'qualityops/release-gate') {
+    return { providerName: 'Mozart-Observability' };
+  }
+
+  if (model === 'governanceops/policy-check') {
+    return { providerName: 'Mozart-Observability' };
+  }
+  if (model === 'governanceops/control-matrix') {
+    return { providerName: 'Mozart-Observability' };
+  }
+  if (model === 'governanceops/release-approval') {
+    return { providerName: 'Mozart-Observability' };
+  }
+
+  if (model === 'marketintel/sector-pulse') {
+    return { sector: 'llm' };
+  }
+  if (model === 'marketintel/provider-gap') {
+    return { sector: 'network', targetProviders: 15 };
+  }
+  if (model === 'marketintel/route-opportunity') {
+    return { modelHint: 'orchestra/auto' };
+  }
+
+  if (model === 'opsguard/provider-quote') {
+    return { modelHint: 'observability/provider-status' };
+  }
+  if (model === 'opsguard/budget-route') {
+    return { modelHint: 'observability/provider-status', maxBudgetUsd: 0.02 };
+  }
+  if (model === 'opsguard/failover-plan') {
+    return { modelHint: 'observability/provider-status', maxBackups: 2 };
+  }
+
+  if (model === 'subnetpulse/subnet-brief') {
+    return { modelHint: 'taostats', protocol: 'drain' };
+  }
+  if (model === 'subnetpulse/validator-route') {
+    return { modelHint: 'validator', protocol: 'drain' };
+  }
+  if (model === 'subnetpulse/miner-route') {
+    return { modelHint: 'taostats', protocol: 'drain' };
+  }
+
+  if (model === 'incidentops/triage-brief') {
+    return { incidentName: 'HS58 routing test' };
+  }
+  if (model === 'incidentops/fallback-sim') {
+    return { modelHint: 'observability/provider-status', simulateFailures: 1 };
+  }
+  if (model === 'incidentops/postmortem-draft') {
+    return { incidentName: 'HS58 routing test', impactSummary: 'Payment test run' };
+  }
+
+  if (model === 'growthops/funnel-audit') {
+    return { category: 'network', protocol: 'drain' };
+  }
+  if (model === 'growthops/pricing-experiment') {
+    return { category: 'network', baselinePriceUsd: 0.004, variantPricesUsd: [0.003, 0.005] };
+  }
+  if (model === 'growthops/retention-playbook') {
+    return { targetProvider: 'Mozart-Observability', cadenceDays: 7 };
+  }
+
+  if (name.includes('mozart-ai-orchestrator')) {
+    return {
+      mode: 'auto',
+      goal: 'Summarize current HS58 Mozart provider health in one paragraph.',
+      budget_usd: 0.05,
+    };
+  }
+
+  return 'Say "Hello from Handshake58 test!" in exactly 5 words.';
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
@@ -277,21 +384,38 @@ async function main() {
       const modelId = model?.modelId || model?.name || 'gpt-4o-mini';
       console.log(`  Sending chat request to ${provUrl}/v1/chat/completions ...`);
 
-      const startTime = Date.now();
-      const chatRes = await fetch(`${provUrl}/v1/chat/completions`, {
+      const userPayload = buildUserPayload(provName, modelId);
+      const userContent = typeof userPayload === 'string' ? userPayload : JSON.stringify(userPayload);
+
+      const requestBody = {
+        model: modelId,
+        messages: [{ role: 'user', content: userContent }],
+        max_tokens: 300,
+      };
+
+      const doChat = async () => fetch(`${provUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-DRAIN-Voucher': voucherHeader,
         },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [
-            { role: 'user', content: 'Say "Hello from Handshake58 test!" in exactly 5 words.' },
-          ],
-          max_tokens: 50,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
+      const startTime = Date.now();
+      let chatRes = await doChat();
+      if (!chatRes.ok && chatRes.status === 402) {
+        let firstBody = '';
+        try { firstBody = await chatRes.text(); } catch {}
+        if (firstBody.includes('channel_not_found')) {
+          console.log('  ↻ channel_not_found (possible RPC lag), retrying in 7s...');
+          await sleep(7000);
+          chatRes = await doChat();
+        } else {
+          // rehydrate response for downstream handling
+          chatRes = new Response(firstBody, { status: chatRes.status, headers: chatRes.headers });
+        }
+      }
 
       const elapsed = Date.now() - startTime;
       result.statusCode = chatRes.status;
