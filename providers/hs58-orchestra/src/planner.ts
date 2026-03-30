@@ -4,27 +4,48 @@ import { PLANNER_SYSTEM_PROMPT, SYNTHESIZER_SYSTEM_PROMPT, UPSTREAM } from './co
 import { executeStep } from './executor.js';
 
 export async function buildPlan(request: OrchestraRequest, config: ProviderConfig): Promise<ExecutionPlan> {
-  const client = new OpenAI({ apiKey: config.chutesApiKey, baseURL: UPSTREAM.chutes.base });
-  const userMessage = [
-    `Goal: ${request.goal}`,
-    request.context ? `Context: ${request.context}` : '',
-    request.budget_usd ? `Budget cap: $${request.budget_usd} USD` : '',
-    request.providers?.length ? `Allowed providers: ${request.providers.join(', ')}` : '',
-  ].filter(Boolean).join('\n');
-
-  const completion = await client.chat.completions.create({
-    model: config.plannerModel,
-    messages: [{ role: 'system', content: PLANNER_SYSTEM_PROMPT }, { role: 'user', content: userMessage }],
-    max_tokens: 1024, temperature: 0.1,
+  let plan: ExecutionPlan;
+  const fallbackPlan = (): ExecutionPlan => ({
+    goal: request.goal,
+    reasoning: 'Fallback single-step plan (planner unavailable)',
+    estimated_total_cost_usd: 0.03,
+    steps: [{
+      id: 'step_1',
+      provider: 'chutes',
+      model: config.plannerModel,
+      task: request.goal,
+      input_from: [],
+      parallel: true,
+      required: true,
+      estimated_cost_usd: 0.03,
+    }],
   });
 
-  const raw     = completion.choices[0]?.message?.content ?? '{}';
-  const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
-  let plan: ExecutionPlan;
-  try { plan = JSON.parse(cleaned); }
-  catch {
-    plan = { goal: request.goal, reasoning: 'Fallback single-step plan', estimated_total_cost_usd: 0.03,
-      steps: [{ id: 'step_1', provider: 'chutes', model: config.plannerModel, task: request.goal, input_from: [], parallel: true, required: true, estimated_cost_usd: 0.03 }] };
+  try {
+    const client = new OpenAI({ apiKey: config.chutesApiKey, baseURL: UPSTREAM.chutes.base });
+    const userMessage = [
+      `Goal: ${request.goal}`,
+      request.context ? `Context: ${request.context}` : '',
+      request.budget_usd ? `Budget cap: $${request.budget_usd} USD` : '',
+      request.providers?.length ? `Allowed providers: ${request.providers.join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+
+    const completion = await client.chat.completions.create({
+      model: config.plannerModel,
+      messages: [{ role: 'system', content: PLANNER_SYSTEM_PROMPT }, { role: 'user', content: userMessage }],
+      max_tokens: 1024, temperature: 0.1,
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? '{}';
+    const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+    try {
+      plan = JSON.parse(cleaned);
+    } catch {
+      plan = fallbackPlan();
+    }
+  } catch (error: any) {
+    console.warn(`[orchestra] planner unavailable, using fallback plan: ${error?.message ?? 'unknown error'}`);
+    plan = fallbackPlan();
   }
 
   if (request.budget_usd) {
