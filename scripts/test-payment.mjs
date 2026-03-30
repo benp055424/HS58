@@ -220,6 +220,18 @@ function voucherAmountUsdForModel(modelId) {
   return VOUCHER_USDC;
 }
 
+function modelOverrideForProvider(providerName) {
+  const globalOverride = process.env.MODEL_OVERRIDE?.trim();
+  if (globalOverride) return globalOverride;
+
+  // Allow targeted override only for Mozart Orchestrator when needed.
+  if (String(providerName || '').toLowerCase().includes('mozart-ai-orchestrator')) {
+    return process.env.ORCHESTRA_MODEL_OVERRIDE?.trim() || null;
+  }
+
+  return null;
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
@@ -388,7 +400,8 @@ async function main() {
       });
 
       // d) Send chat request
-      const modelId = model?.modelId || model?.name || 'gpt-4o-mini';
+      const discoveredModelId = model?.modelId || model?.name || 'gpt-4o-mini';
+      const modelId = modelOverrideForProvider(provName) || discoveredModelId;
       console.log(`  Sending chat request to ${provUrl}/v1/chat/completions ...`);
 
       const userPayload = buildUserPayload(provName, modelId);
