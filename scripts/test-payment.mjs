@@ -28,7 +28,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // CONFIG
 // ============================================================================
 
-const DRAIN_CONTRACT = '0x1C1918C99b6DcE977392E4131C91654d8aB71e64';
+const DRAIN_CONTRACT = process.env.DRAIN_CONTRACT || '0x0C2B3aA1e80629D572b1f200e6DF3586B3946A8A';
 const USDC_ADDRESS   = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
 const CHAIN_ID       = 137;
 
