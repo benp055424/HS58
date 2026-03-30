@@ -293,6 +293,11 @@ const emissionRotation: ToolHandler = async (raw) => {
 };
 
 export const toolRegistry = new Map<string, ToolHandler>([
+  // Canonical model IDs exposed by /v1/models and /v1/pricing
+  ['subnetpulse/subnet-brief', subnetOverview],
+  ['subnetpulse/validator-route', validatorMinerRank],
+  ['subnetpulse/miner-route', emissionRotation],
+  // Backward-compatible aliases to avoid breaking older callers
   ['subnetpulse/subnet-overview', subnetOverview],
   ['subnetpulse/validator-miner-rank', validatorMinerRank],
   ['subnetpulse/emission-rotation', emissionRotation],
