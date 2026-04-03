@@ -16,6 +16,30 @@ app.use(express.json({ limit: '1mb' }));
 
 const rateLimitMap = new Map<string, number[]>();
 
+function requestIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || 'unknown';
+}
+
+function logPaymentReject(
+  req: express.Request,
+  reason: string,
+  extras: Record<string, string | number | bigint | undefined> = {},
+): void {
+  const fields = [
+    `reason=${reason}`,
+    `ip=${requestIp(req)}`,
+    `model=${typeof req.body?.model === 'string' ? req.body.model : 'unknown'}`,
+    ...Object.entries(extras)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `${key}=${String(value)}`),
+  ];
+  console.warn(`[payment] reject ${fields.join(' ')}`);
+}
+
 function checkRateLimit(channelId: string): boolean {
   const now = Date.now();
   const hits = rateLimitMap.get(channelId) ?? [];
@@ -144,8 +168,10 @@ app.get('/health', (_req, res) => {
 });
 
 app.post('/v1/chat/completions', async (req, res) => {
+  const startedAt = Date.now();
   const voucherHeader = req.headers['x-drain-voucher'] as string | undefined;
   if (!voucherHeader) {
+    logPaymentReject(req, 'voucher_required');
     res.status(402).set({ 'X-DRAIN-Error': 'voucher_required' }).json({
       error: { message: 'X-DRAIN-Voucher header required', type: 'payment_required', code: 'voucher_required' },
     });
@@ -154,6 +180,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   const voucher = drainService.parseVoucherHeader(voucherHeader);
   if (!voucher) {
+    logPaymentReject(req, 'invalid_voucher_format');
     res.status(402).set({ 'X-DRAIN-Error': 'invalid_voucher_format' }).json({
       error: { message: 'Invalid X-DRAIN-Voucher format', type: 'payment_required', code: 'invalid_voucher_format' },
     });
@@ -167,6 +194,9 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 
   if (!checkRateLimit(voucher.channelId)) {
+    console.warn(
+      `[payment] rate_limited ip=${requestIp(req)} channel=${voucher.channelId} model=${model}`,
+    );
     res.status(429).json({ error: { message: `Rate limit exceeded (${config.rateLimitPerMinute}/min)` } });
     return;
   }
@@ -180,6 +210,11 @@ app.post('/v1/chat/completions', async (req, res) => {
       headers['X-DRAIN-Required'] = cost.toString();
       headers['X-DRAIN-Provided'] = (BigInt(voucher.amount) - validation.channel.totalCharged).toString();
     }
+    logPaymentReject(req, validation.error!, {
+      channel: voucher.channelId,
+      cost,
+      voucherAmount: voucher.amount,
+    });
     res.status(402).set(headers).json({
       error: { message: `Payment validation failed: ${validation.error}`, type: 'payment_required', code: validation.error },
     });
@@ -219,6 +254,9 @@ app.post('/v1/chat/completions', async (req, res) => {
     choices: [{ index: 0, message: { role: 'assistant', content: result }, finish_reason: 'stop' }],
     usage: { prompt_tokens: 0, completion_tokens: 1, total_tokens: 1 },
   });
+  console.log(
+    `[payment] accepted ip=${requestIp(req)} channel=${voucher.channelId} model=${model} cost=${cost.toString()} total=${channelState.totalCharged.toString()} latency_ms=${Date.now() - startedAt}`,
+  );
 });
 
 app.post('/v1/close-channel', async (req, res) => {
