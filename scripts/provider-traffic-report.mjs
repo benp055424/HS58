@@ -120,6 +120,16 @@ function formatUsdc(raw) {
   return `${neg ? '-' : ''}${whole.toString()}.${frac}`;
 }
 
+function parseUsdcToMicros(value) {
+  const text = String(value ?? '').trim();
+  const match = text.match(/^(-?\d+)(?:\.(\d{1,6})\d*)?$/);
+  if (!match) return null;
+  const sign = match[1].startsWith('-') ? -1n : 1n;
+  const whole = BigInt(match[1].replace('-', ''));
+  const frac = BigInt((match[2] || '').padEnd(6, '0'));
+  return sign * (whole * 1_000_000n + frac);
+}
+
 function short(text, max = 36) {
   const s = String(text || '');
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
@@ -267,6 +277,15 @@ async function fetchProviderTrafficRow(provider, options) {
     activeChannels: 0,
     totalEarnedRaw: '0',
     totalEarnedUsdc: '0.000000',
+    estEarnedMinRaw: '0',
+    estEarnedMinUsdc: '0.000000',
+    estEarnedMaxRaw: '0',
+    estEarnedMaxUsdc: '0.000000',
+    modelPriceMinRaw: '0',
+    modelPriceMinUsdc: '0.000000',
+    modelPriceMaxRaw: '0',
+    modelPriceMaxUsdc: '0.000000',
+    pricingStatus: 0,
     lastVoucherAt: '',
     error: '',
   };
@@ -287,6 +306,30 @@ async function fetchProviderTrafficRow(provider, options) {
   const earned = toBigInt(statsRes.json.totalEarned, 0n);
   row.totalEarnedRaw = earned.toString();
   row.totalEarnedUsdc = formatUsdc(earned);
+
+  const pricingRes = await fetchJson(`${base}/v1/pricing`, { timeoutMs: options.timeoutMs, headers: {} });
+  row.pricingStatus = pricingRes.status;
+  if (pricingRes.ok && pricingRes.json && pricingRes.json.models && typeof pricingRes.json.models === 'object') {
+    const modelPrices = Object.values(pricingRes.json.models)
+      .map((m) => parseUsdcToMicros(m?.inputPer1kTokens))
+      .filter((v) => v !== null && v >= 0n);
+
+    if (modelPrices.length > 0) {
+      const minModelPrice = modelPrices.reduce((a, b) => (a < b ? a : b));
+      const maxModelPrice = modelPrices.reduce((a, b) => (a > b ? a : b));
+      row.modelPriceMinRaw = minModelPrice.toString();
+      row.modelPriceMinUsdc = formatUsdc(minModelPrice);
+      row.modelPriceMaxRaw = maxModelPrice.toString();
+      row.modelPriceMaxUsdc = formatUsdc(maxModelPrice);
+
+      const estMin = BigInt(row.totalVouchers) * minModelPrice;
+      const estMax = BigInt(row.totalVouchers) * maxModelPrice;
+      row.estEarnedMinRaw = estMin.toString();
+      row.estEarnedMinUsdc = formatUsdc(estMin);
+      row.estEarnedMaxRaw = estMax.toString();
+      row.estEarnedMaxUsdc = formatUsdc(estMax);
+    }
+  }
 
   if (options.includeVouchers) {
     const vouchersUrl = `${base}/v1/admin/vouchers`;
@@ -321,7 +364,8 @@ function makeTableText(summary, rows, options) {
     'Vouchers'.padStart(8),
     'Active'.padStart(6),
     'Uncl'.padStart(5),
-    'Earned USDC'.padStart(13),
+    'Est Min'.padStart(13),
+    'Est Max'.padStart(13),
     'Auth'.padEnd(13),
     'Status'.padEnd(14),
     'Host',
@@ -336,7 +380,8 @@ function makeTableText(summary, rows, options) {
       String(r.totalVouchers).padStart(8),
       String(r.activeChannels).padStart(6),
       String(r.unclaimedVouchers).padStart(5),
-      r.totalEarnedUsdc.padStart(13),
+      r.estEarnedMinUsdc.padStart(13),
+      r.estEarnedMaxUsdc.padStart(13),
       short(r.authMode, 13).padEnd(13),
       short(r.trafficStatus, 14).padEnd(14),
       short(r.host, 44),
@@ -358,10 +403,10 @@ function makeTableText(summary, rows, options) {
 
 function makeMarkdownText(rows, options) {
   const lines = [];
-  lines.push('| Rank | Provider | Vouchers | Active | Unclaimed | Earned_USDC | Auth | Status | Host |');
-  lines.push('|---:|---|---:|---:|---:|---:|---|---|---|');
+  lines.push('| Rank | Provider | Vouchers | Active | Unclaimed | Est_Min_USDC | Est_Max_USDC | Auth | Status | Host |');
+  lines.push('|---:|---|---:|---:|---:|---:|---:|---|---|---|');
   rows.slice(0, options.top).forEach((r, idx) => {
-    lines.push(`| ${idx + 1} | ${r.name} | ${r.totalVouchers} | ${r.activeChannels} | ${r.unclaimedVouchers} | ${r.totalEarnedUsdc} | ${r.authMode} | ${r.trafficStatus} | ${r.host} |`);
+    lines.push(`| ${idx + 1} | ${r.name} | ${r.totalVouchers} | ${r.activeChannels} | ${r.unclaimedVouchers} | ${r.estEarnedMinUsdc} | ${r.estEarnedMaxUsdc} | ${r.authMode} | ${r.trafficStatus} | ${r.host} |`);
   });
   return lines.join('\n');
 }
@@ -385,6 +430,14 @@ function makeCsvText(rows, options) {
     'unclaimedVouchers',
     'totalEarnedRaw',
     'totalEarnedUsdc',
+    'estEarnedMinRaw',
+    'estEarnedMinUsdc',
+    'estEarnedMaxRaw',
+    'estEarnedMaxUsdc',
+    'modelPriceMinRaw',
+    'modelPriceMinUsdc',
+    'modelPriceMaxRaw',
+    'modelPriceMaxUsdc',
     'authMode',
     'trafficStatus',
     'statsStatus',
@@ -403,6 +456,14 @@ function makeCsvText(rows, options) {
       r.unclaimedVouchers,
       r.totalEarnedRaw,
       r.totalEarnedUsdc,
+      r.estEarnedMinRaw,
+      r.estEarnedMinUsdc,
+      r.estEarnedMaxRaw,
+      r.estEarnedMaxUsdc,
+      r.modelPriceMinRaw,
+      r.modelPriceMinUsdc,
+      r.modelPriceMaxRaw,
+      r.modelPriceMaxUsdc,
       r.authMode,
       r.trafficStatus,
       r.statsStatus,
