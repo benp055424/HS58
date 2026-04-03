@@ -19,6 +19,7 @@ const DEFAULT_MARKETPLACE_URL = 'https://handshake58.com';
 const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_TOP = 50;
+const DEFAULT_WATCH_SECONDS = 60;
 
 function parseArgs(argv) {
   const options = {
@@ -30,6 +31,7 @@ function parseArgs(argv) {
     includeVouchers: true,
     onlyTraffic: false,
     json: false,
+    watchSeconds: Number(process.env.WATCH_SECONDS || 0),
     providerUrls: [],
     providersFile: '',
   };
@@ -46,6 +48,7 @@ function parseArgs(argv) {
     else if (arg === '--no-vouchers') options.includeVouchers = false;
     else if (arg === '--only-traffic') options.onlyTraffic = true;
     else if (arg === '--json') options.json = true;
+    else if (arg === '--watch') options.watchSeconds = Number(argv[++i]);
     else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -55,6 +58,7 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) options.timeoutMs = DEFAULT_TIMEOUT_MS;
   if (!Number.isFinite(options.concurrency) || options.concurrency <= 0) options.concurrency = DEFAULT_CONCURRENCY;
   if (!Number.isFinite(options.top) || options.top <= 0) options.top = DEFAULT_TOP;
+  if (!Number.isFinite(options.watchSeconds) || options.watchSeconds < 0) options.watchSeconds = 0;
   return options;
 }
 
@@ -71,6 +75,7 @@ Options:
   --timeout-ms <n>          HTTP timeout per request (default: 12000)
   --concurrency <n>         Parallel checks (default: 8)
   --top <n>                 Max rows to print (default: 50)
+  --watch <seconds>         Refresh report continuously (default interval: 60)
   --no-vouchers             Skip /v1/admin/vouchers lookup
   --only-traffic            Show only providers with paid traffic
   --json                    Output machine-readable JSON
@@ -119,6 +124,10 @@ function parseHost(url) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchJson(url, { timeoutMs, headers = {} }) {
@@ -301,55 +310,74 @@ function printTable(rows, options) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const hasExplicitProviders = options.providerUrls.length > 0 || !!options.providersFile;
+  const watchSeconds = options.watchSeconds > 0 ? options.watchSeconds : 0;
+  const watchIntervalMs = (watchSeconds || DEFAULT_WATCH_SECONDS) * 1000;
 
-  let providers = buildProviderList(options);
-  if (providers.length === 0) {
-    providers = await loadMarketplaceProviders(options);
-  }
-  if (providers.length === 0) {
-    throw new Error('No providers found to inspect');
-  }
+  for (let iteration = 1; ; iteration += 1) {
+    let providers = buildProviderList(options);
+    if (providers.length === 0) {
+      providers = await loadMarketplaceProviders(options);
+    }
+    if (providers.length === 0) {
+      throw new Error('No providers found to inspect');
+    }
 
-  const rows = await mapWithConcurrency(
-    providers,
-    options.concurrency,
-    async (provider) => fetchProviderTrafficRow(provider, options),
-  );
+    const rows = await mapWithConcurrency(
+      providers,
+      options.concurrency,
+      async (provider) => fetchProviderTrafficRow(provider, options),
+    );
 
-  const filtered = options.onlyTraffic ? rows.filter((r) => r.trafficStatus === 'traffic') : rows;
-  filtered.sort((a, b) => {
-    if (b.totalVouchers !== a.totalVouchers) return b.totalVouchers - a.totalVouchers;
-    if (b.activeChannels !== a.activeChannels) return b.activeChannels - a.activeChannels;
-    if (b.unclaimedVouchers !== a.unclaimedVouchers) return b.unclaimedVouchers - a.unclaimedVouchers;
-    const be = toBigInt(b.totalEarnedRaw, 0n);
-    const ae = toBigInt(a.totalEarnedRaw, 0n);
-    if (be !== ae) return be > ae ? 1 : -1;
-    return a.name.localeCompare(b.name);
-  });
-
-  const summary = {
-    generatedAt: nowIso(),
-    checked: rows.length,
-    readable: rows.filter((r) => r.statsOk).length,
-    withTraffic: rows.filter((r) => r.trafficStatus === 'traffic').length,
-    unreadable: rows.filter((r) => !r.statsOk).length,
-  };
-
-  if (options.json) {
-    console.log(JSON.stringify({ summary, rows: filtered.slice(0, options.top) }, null, 2));
-    return;
-  }
-
-  console.log(`\nHS58 Provider Traffic Report @ ${summary.generatedAt}`);
-  console.log(`Checked: ${summary.checked} | Readable: ${summary.readable} | With traffic: ${summary.withTraffic} | Unreadable: ${summary.unreadable}\n`);
-  printTable(filtered, options);
-
-  const unreadable = rows.filter((r) => !r.statsOk);
-  if (unreadable.length > 0) {
-    console.log('\nUnreadable providers (likely admin auth required or endpoint issue):');
-    unreadable.slice(0, 20).forEach((r) => {
-      console.log(`- ${r.name} (${r.host}) -> ${r.error}`);
+    const filtered = options.onlyTraffic ? rows.filter((r) => r.trafficStatus === 'traffic') : rows;
+    filtered.sort((a, b) => {
+      if (b.totalVouchers !== a.totalVouchers) return b.totalVouchers - a.totalVouchers;
+      if (b.activeChannels !== a.activeChannels) return b.activeChannels - a.activeChannels;
+      if (b.unclaimedVouchers !== a.unclaimedVouchers) return b.unclaimedVouchers - a.unclaimedVouchers;
+      const be = toBigInt(b.totalEarnedRaw, 0n);
+      const ae = toBigInt(a.totalEarnedRaw, 0n);
+      if (be !== ae) return be > ae ? 1 : -1;
+      return a.name.localeCompare(b.name);
     });
+
+    const summary = {
+      generatedAt: nowIso(),
+      checked: rows.length,
+      readable: rows.filter((r) => r.statsOk).length,
+      withTraffic: rows.filter((r) => r.trafficStatus === 'traffic').length,
+      unreadable: rows.filter((r) => !r.statsOk).length,
+      iteration,
+    };
+
+    if (options.json) {
+      console.log(JSON.stringify({ summary, rows: filtered.slice(0, options.top) }, null, watchSeconds > 0 ? 0 : 2));
+    } else {
+      console.log(`\nHS58 Provider Traffic Report @ ${summary.generatedAt}`);
+      if (watchSeconds > 0) {
+        console.log(`Iteration: ${summary.iteration} | Next refresh in ${watchIntervalMs / 1000}s`);
+      }
+      console.log(`Checked: ${summary.checked} | Readable: ${summary.readable} | With traffic: ${summary.withTraffic} | Unreadable: ${summary.unreadable}\n`);
+      printTable(filtered, options);
+
+      const unreadable = rows.filter((r) => !r.statsOk);
+      if (unreadable.length > 0) {
+        console.log('\nUnreadable providers (likely admin auth required or endpoint issue):');
+        unreadable.slice(0, 20).forEach((r) => {
+          console.log(`- ${r.name} (${r.host}) -> ${r.error}`);
+        });
+      }
+    }
+
+    if (watchSeconds === 0) {
+      return;
+    }
+
+    // Reuse explicit provider targets each cycle; refresh marketplace set if auto-discovered.
+    if (!hasExplicitProviders) {
+      await sleep(watchIntervalMs);
+      continue;
+    }
+    await sleep(watchIntervalMs);
   }
 }
 
