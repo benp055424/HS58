@@ -13,7 +13,7 @@
  *   ADMIN_PASSWORD=...  (used for Authorization: Bearer ...)
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 
 const DEFAULT_MARKETPLACE_URL = 'https://handshake58.com';
 const DEFAULT_TIMEOUT_MS = 12000;
@@ -31,6 +31,9 @@ function parseArgs(argv) {
     includeVouchers: true,
     onlyTraffic: false,
     json: false,
+    format: 'table',
+    outputPath: '',
+    detectAuth: false,
     watchSeconds: Number(process.env.WATCH_SECONDS || 0),
     providerUrls: [],
     providersFile: '',
@@ -48,6 +51,9 @@ function parseArgs(argv) {
     else if (arg === '--no-vouchers') options.includeVouchers = false;
     else if (arg === '--only-traffic') options.onlyTraffic = true;
     else if (arg === '--json') options.json = true;
+    else if (arg === '--format') options.format = String(argv[++i] || '').toLowerCase();
+    else if (arg === '--output') options.outputPath = argv[++i];
+    else if (arg === '--detect-auth') options.detectAuth = true;
     else if (arg === '--watch') options.watchSeconds = Number(argv[++i]);
     else if (arg === '--help' || arg === '-h') {
       printHelp();
@@ -59,6 +65,8 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.concurrency) || options.concurrency <= 0) options.concurrency = DEFAULT_CONCURRENCY;
   if (!Number.isFinite(options.top) || options.top <= 0) options.top = DEFAULT_TOP;
   if (!Number.isFinite(options.watchSeconds) || options.watchSeconds < 0) options.watchSeconds = 0;
+  if (options.json) options.format = 'json';
+  if (!['table', 'json', 'csv', 'markdown'].includes(options.format)) options.format = 'table';
   return options;
 }
 
@@ -76,6 +84,9 @@ Options:
   --concurrency <n>         Parallel checks (default: 8)
   --top <n>                 Max rows to print (default: 50)
   --watch <seconds>         Refresh report continuously (default interval: 60)
+  --detect-auth             Probe /v1/admin/stats auth mode (open/auth_required/unreachable)
+  --format <type>           Output format: table | json | csv | markdown
+  --output <path>           Save output to file (overwrites each run/refresh)
   --no-vouchers             Skip /v1/admin/vouchers lookup
   --only-traffic            Show only providers with paid traffic
   --json                    Output machine-readable JSON
@@ -219,12 +230,26 @@ async function mapWithConcurrency(items, limit, mapper) {
 }
 
 async function fetchProviderTrafficRow(provider, options) {
+  const base = trimSlash(provider.apiUrl);
+  const statsUrl = `${base}/v1/admin/stats`;
+  let unauthRes = null;
+  if (options.detectAuth || !options.adminPassword) {
+    unauthRes = await fetchJson(statsUrl, { timeoutMs: options.timeoutMs, headers: {} });
+  }
+
+  let authMode = 'undetermined';
+  if (options.detectAuth) {
+    if (unauthRes?.ok) authMode = 'open';
+    else if (unauthRes?.status === 401 || unauthRes?.status === 403) authMode = 'auth_required';
+    else authMode = 'unreachable';
+  }
+
   const headers = {};
   if (options.adminPassword) headers.Authorization = `Bearer ${options.adminPassword}`;
 
-  const base = trimSlash(provider.apiUrl);
-  const statsUrl = `${base}/v1/admin/stats`;
-  const statsRes = await fetchJson(statsUrl, { timeoutMs: options.timeoutMs, headers });
+  const statsRes = options.adminPassword
+    ? await fetchJson(statsUrl, { timeoutMs: options.timeoutMs, headers })
+    : (unauthRes || await fetchJson(statsUrl, { timeoutMs: options.timeoutMs, headers: {} }));
 
   const row = {
     name: provider.name || parseHost(base),
@@ -235,6 +260,7 @@ async function fetchProviderTrafficRow(provider, options) {
     marketplaceInferenceOnline: provider.inferenceOnline,
     statsStatus: statsRes.status,
     statsOk: statsRes.ok,
+    authMode,
     trafficStatus: 'unknown',
     totalVouchers: 0,
     unclaimedVouchers: 0,
@@ -279,7 +305,16 @@ async function fetchProviderTrafficRow(provider, options) {
   return row;
 }
 
-function printTable(rows, options) {
+function makeTableText(summary, rows, options) {
+  const lines = [];
+  lines.push(`HS58 Provider Traffic Report @ ${summary.generatedAt}`);
+  if (options.watchSeconds > 0) {
+    const interval = options.watchSeconds > 0 ? options.watchSeconds : DEFAULT_WATCH_SECONDS;
+    lines.push(`Iteration: ${summary.iteration} | Next refresh in ${interval}s`);
+  }
+  lines.push(`Checked: ${summary.checked} | Readable: ${summary.readable} | With traffic: ${summary.withTraffic} | Unreadable: ${summary.unreadable}`);
+  lines.push('');
+
   const header = [
     'Rank'.padEnd(4),
     'Provider'.padEnd(28),
@@ -287,11 +322,12 @@ function printTable(rows, options) {
     'Active'.padStart(6),
     'Uncl'.padStart(5),
     'Earned USDC'.padStart(13),
+    'Auth'.padEnd(13),
     'Status'.padEnd(14),
     'Host',
   ].join('  ');
-  console.log(header);
-  console.log('-'.repeat(Math.max(100, header.length)));
+  lines.push(header);
+  lines.push('-'.repeat(Math.max(114, header.length)));
 
   rows.slice(0, options.top).forEach((r, idx) => {
     const line = [
@@ -301,11 +337,93 @@ function printTable(rows, options) {
       String(r.activeChannels).padStart(6),
       String(r.unclaimedVouchers).padStart(5),
       r.totalEarnedUsdc.padStart(13),
+      short(r.authMode, 13).padEnd(13),
       short(r.trafficStatus, 14).padEnd(14),
       short(r.host, 44),
     ].join('  ');
-    console.log(line);
+    lines.push(line);
   });
+
+  const unreadable = rows.filter((r) => !r.statsOk);
+  if (unreadable.length > 0) {
+    lines.push('');
+    lines.push('Unreadable providers (likely admin auth required or endpoint issue):');
+    unreadable.slice(0, 20).forEach((r) => {
+      lines.push(`- ${r.name} (${r.host}) -> ${r.error}`);
+    });
+  }
+
+  return lines.join('\n');
+}
+
+function makeMarkdownText(rows, options) {
+  const lines = [];
+  lines.push('| Rank | Provider | Vouchers | Active | Unclaimed | Earned_USDC | Auth | Status | Host |');
+  lines.push('|---:|---|---:|---:|---:|---:|---|---|---|');
+  rows.slice(0, options.top).forEach((r, idx) => {
+    lines.push(`| ${idx + 1} | ${r.name} | ${r.totalVouchers} | ${r.activeChannels} | ${r.unclaimedVouchers} | ${r.totalEarnedUsdc} | ${r.authMode} | ${r.trafficStatus} | ${r.host} |`);
+  });
+  return lines.join('\n');
+}
+
+function csvEscape(value) {
+  const s = String(value ?? '');
+  if (/[",\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
+  return s;
+}
+
+function makeCsvText(rows, options) {
+  const lines = [];
+  lines.push([
+    'rank',
+    'provider',
+    'url',
+    'host',
+    'providerAddress',
+    'totalVouchers',
+    'activeChannels',
+    'unclaimedVouchers',
+    'totalEarnedRaw',
+    'totalEarnedUsdc',
+    'authMode',
+    'trafficStatus',
+    'statsStatus',
+    'error',
+    'lastVoucherAt',
+  ].join(','));
+  rows.slice(0, options.top).forEach((r, idx) => {
+    lines.push([
+      idx + 1,
+      r.name,
+      r.url,
+      r.host,
+      r.providerAddress,
+      r.totalVouchers,
+      r.activeChannels,
+      r.unclaimedVouchers,
+      r.totalEarnedRaw,
+      r.totalEarnedUsdc,
+      r.authMode,
+      r.trafficStatus,
+      r.statsStatus,
+      r.error,
+      r.lastVoucherAt,
+    ].map(csvEscape).join(','));
+  });
+  return lines.join('\n');
+}
+
+function renderOutput(summary, rows, options) {
+  if (options.format === 'json') {
+    return JSON.stringify({ summary, rows: rows.slice(0, options.top) }, null, options.watchSeconds > 0 ? 0 : 2);
+  }
+  if (options.format === 'csv') {
+    return makeCsvText(rows, options);
+  }
+  if (options.format === 'markdown') {
+    return makeMarkdownText(rows, options);
+  }
+  return makeTableText(summary, rows, options);
 }
 
 async function main() {
@@ -349,24 +467,14 @@ async function main() {
       iteration,
     };
 
-    if (options.json) {
-      console.log(JSON.stringify({ summary, rows: filtered.slice(0, options.top) }, null, watchSeconds > 0 ? 0 : 2));
-    } else {
-      console.log(`\nHS58 Provider Traffic Report @ ${summary.generatedAt}`);
-      if (watchSeconds > 0) {
-        console.log(`Iteration: ${summary.iteration} | Next refresh in ${watchIntervalMs / 1000}s`);
-      }
-      console.log(`Checked: ${summary.checked} | Readable: ${summary.readable} | With traffic: ${summary.withTraffic} | Unreadable: ${summary.unreadable}\n`);
-      printTable(filtered, options);
-
-      const unreadable = rows.filter((r) => !r.statsOk);
-      if (unreadable.length > 0) {
-        console.log('\nUnreadable providers (likely admin auth required or endpoint issue):');
-        unreadable.slice(0, 20).forEach((r) => {
-          console.log(`- ${r.name} (${r.host}) -> ${r.error}`);
-        });
+    const output = renderOutput(summary, filtered, options);
+    if (options.outputPath) {
+      writeFileSync(options.outputPath, `${output}\n`, 'utf8');
+      if (options.format !== 'json') {
+        console.log(`Saved ${options.format} report to ${options.outputPath}`);
       }
     }
+    console.log(options.format === 'table' ? `\n${output}` : output);
 
     if (watchSeconds === 0) {
       return;
