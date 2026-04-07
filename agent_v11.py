@@ -37,7 +37,7 @@ MODEL_CHUTES = "Qwen/Qwen3-235B-A22B-Instruct-2507"
 MODEL_CHUTES_FALLBACK = "openai/gpt-oss-120b"
 
 TIME_BUDGET_SECONDS = 185.0
-SAFE_DEFAULT = 0.36
+SAFE_DEFAULT = 0.35
 PRED_MIN = 0.01
 PRED_MAX = 0.99
 
@@ -274,11 +274,8 @@ def classify_domain(event_data: dict[str, Any]) -> str:
 def post_calibrate(prob: float, domain: str) -> float:
     if domain == "weather":
         return clamp(sigmoid(WEATHER_COEFS[0] * prob + WEATHER_COEFS[1]))
-    # Light positive shift in non-weather domains.
-    shift = 0.04 if domain in ("general", "geopolitics") else 0.02
-    p = clamp(prob, 0.001, 0.999)
-    logit = math.log(p / (1.0 - p))
-    return clamp(1.0 / (1.0 + math.exp(-(logit + shift))))
+    # Keep non-weather outputs market-faithful; avoid unnecessary drift.
+    return clamp(prob)
 
 
 async def async_retry(fn, retries: int = 3, delay: float = 1.1):
@@ -325,46 +322,55 @@ async def crawl_json(client: httpx.AsyncClient, url: str, budget: Budget) -> dic
 async def find_general_match(
     client: httpx.AsyncClient, title: str, description: str, budget: Budget
 ) -> MarketMatch | None:
-    query = keyword_query(title)
-    data = await crawl_json(client, f"{POLYMARKET_BASE}/public-search?q={query}", budget)
-    if not data:
-        return None
-
     wanted = normalize_text(title)
     event_date = parse_scheduled_date(description)
     best: MarketMatch | None = None
     best_score = -1.0
+    queries = [
+        keyword_query(title),
+        title[:80],
+        f"Polymarket {keyword_query(title)}",
+    ]
+    seen_questions: set[str] = set()
 
-    for event in data.get("events") or []:
-        for market in event.get("markets") or []:
-            question = str(market.get("question", ""))
-            yes_price = parse_yes_price(market)
-            if yes_price is None:
-                continue
-            desc = str(market.get("description", ""))
+    for query in queries:
+        data = await crawl_json(client, f"{POLYMARKET_BASE}/public-search?q={query}", budget)
+        if not data:
+            continue
+        for event in data.get("events") or []:
+            for market in event.get("markets") or []:
+                question = str(market.get("question", ""))
+                if not question or question in seen_questions:
+                    continue
+                seen_questions.add(question)
 
-            norm_q = normalize_text(question)
-            sim = jaccard(title, question)
-            exact = norm_q == wanted or sim >= 0.985
-            if sim < 0.35 and not exact:
-                continue
+                yes_price = parse_yes_price(market)
+                if yes_price is None:
+                    continue
+                desc = str(market.get("description", ""))
 
-            score = sim + (0.3 if exact else 0.0)
-            if event_date:
-                if date_compatible(event_date, desc):
-                    score += 0.08
-                else:
-                    score -= 0.10
+                norm_q = normalize_text(question)
+                sim = jaccard(title, question)
+                exact = norm_q == wanted or sim >= 0.985
+                if sim < 0.35 and not exact:
+                    continue
 
-            if score > best_score:
-                best_score = score
-                best = MarketMatch(
-                    question=question,
-                    description=desc,
-                    yes_price=clamp(yes_price),
-                    similarity=sim,
-                    exact=exact,
-                )
+                score = sim + (0.3 if exact else 0.0)
+                if event_date:
+                    if date_compatible(event_date, desc):
+                        score += 0.08
+                    else:
+                        score -= 0.10
+
+                if score > best_score:
+                    best_score = score
+                    best = MarketMatch(
+                        question=question,
+                        description=desc,
+                        yes_price=clamp(yes_price),
+                        similarity=sim,
+                        exact=exact,
+                    )
     return best
 
 
@@ -735,13 +741,18 @@ async def run_desearch_fallback(
 def blend_with_market(domain: str, llm_pred: float, related: MarketMatch | None) -> float:
     if related is None:
         return llm_pred
-    if related.similarity >= 0.85:
-        w_market = 0.72 if domain in ("sports", "crypto", "app_store") else 0.64
+    if related.similarity >= 0.88:
+        w_market = 0.80 if domain in ("sports", "crypto", "app_store") else 0.72
     elif related.similarity >= 0.72:
-        w_market = 0.56
+        w_market = 0.62
     else:
-        w_market = 0.42
+        w_market = 0.46
     blended = w_market * related.yes_price + (1.0 - w_market) * llm_pred
+    # Keep high-similarity forecasts close to market unless evidence is very strong.
+    if related.similarity >= 0.88 and domain != "weather":
+        low = max(PRED_MIN, related.yes_price - 0.12)
+        high = min(PRED_MAX, related.yes_price + 0.12)
+        blended = max(low, min(high, blended))
     if domain == "geopolitics":
         low = max(PRED_MIN, related.yes_price - 0.20)
         high = min(PRED_MAX, related.yes_price + 0.20)
@@ -768,7 +779,7 @@ async def forecast(event_data: dict[str, Any]) -> dict[str, Any]:
         # Exact market route.
         if match.status == "EXACT" and match.exact_match is not None:
             raw = match.exact_match.yes_price
-            pred = post_calibrate(raw, domain)
+            pred = post_calibrate(raw, domain if domain == "weather" else "exact")
             return {
                 "event_id": event_id,
                 "prediction": pred,
