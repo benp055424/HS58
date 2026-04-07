@@ -1,0 +1,20 @@
+| Rank | Provider | Vouchers | Active | Unclaimed | Est_Min_USDC | Est_Max_USDC | Auth | Status | Host |
+|---:|---|---:|---:|---:|---:|---:|---|---|---|
+| 1 | HS58-Desearch | 466 | 25 | 48 | 0.104850 | 2.796000 | open | traffic | hs58-desearch-production.up.railway.app |
+| 2 | HS58-OpenRouter | 169 | 18 | 21 | 0.000000 | 38.025000 | open | traffic | hs58-openrouter-production.up.railway.app |
+| 3 | HS58-Webtools | 52 | 5 | 0 | 0.390000 | 0.520000 | open | traffic | hs58-webtools-production.up.railway.app |
+| 4 | HS58-Claude | 33 | 6 | 1 | 0.012375 | 0.742500 | open | traffic | awake-consideration-production-5449.up.railway.app |
+| 5 | HS58-OpenAI | 14 | 13 | 0 | 0.003150 | 0.630000 | open | traffic | hs58-bittensor-openai-production.up.railway.app |
+| 6 | HS58-Replicate | 13 | 6 | 0 | 0.195000 | 5.850000 | open | traffic | hs58-replicate-production.up.railway.app |
+| 7 | Community-Targon | 5 | 4 | 0 | 0.005000 | 12.500000 | open | traffic | hs58-production-5ee9.up.railway.app |
+| 8 | Community-Taostats | 4 | 3 | 0 | 0.020000 | 0.020000 | open | traffic | hs58-production-1390.up.railway.app |
+| 9 | Community-TPN | 3 | 3 | 0 | 0.015000 | 0.015000 | open | traffic | hs58-tpn-production.up.railway.app |
+| 10 | HS58-Apify | 2 | 2 | 0 | 0.020000 | 64.000000 | open | traffic | hs58-production.up.railway.app |
+| 11 | HS58-OpenAI | 2 | 1 | 0 | 0.000450 | 0.090000 | open | traffic | alluring-caring-production.up.railway.app |
+| 12 | Mozart-Allocator | 1 | 1 | 0 | 0.004000 | 0.008000 | open | traffic | hs58-production-ec82.up.railway.app |
+| 13 | Mozart-CompeteOps | 1 | 1 | 0 | 0.004000 | 0.008000 | open | traffic | hs58-production-a54b.up.railway.app |
+| 14 | Mozart-DelegationOps | 1 | 1 | 0 | 0.004000 | 0.008000 | open | traffic | hs58-production-53f1.up.railway.app |
+| 15 | Mozart-ProfitOps | 1 | 1 | 0 | 0.004000 | 0.008000 | open | traffic | hs58-production-c7ed.up.railway.app |
+| 16 | Mozart-TreasuryOps | 1 | 1 | 0 | 0.004000 | 0.008000 | open | traffic | hs58-production-c9a5.up.railway.app |
+| 17 | Mozart-UptimeOps | 1 | 1 | 0 | 0.004000 | 0.008000 | open | traffic | hs58-production-5f74.up.railway.app |
+| 18 | Mozart | 1 | 0 | 0 | 0.005000 | 0.010000 | open | traffic | hs58-production-1927.up.railway.app |
