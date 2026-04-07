@@ -115,96 +115,119 @@ function platformWeight(platform: GigPlatform | undefined): number {
   return 0;
 }
 
-function stripTags(text: string): string {
-  return text
-    .replace(/<!\[CDATA\[|\]\]>/g, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-async function fetchText(url: string, timeoutMs: number): Promise<string> {
+async function fetchJson(
+  url: string,
+  timeoutMs: number,
+  headers: Record<string, string> = {}
+): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal, headers });
     if (!response.ok) throw new Error(`upstream_http_${response.status}`);
-    return await response.text();
+    return await response.json();
   } finally {
     clearTimeout(timer);
   }
 }
 
-function parseRssItems(xml: string): Array<{ title: string; description: string }> {
-  const items = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
-  return items.map((item) => {
-    const title = stripTags((item.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || '').trim());
-    const description = stripTags((item.match(/<description>([\s\S]*?)<\/description>/i)?.[1] || '').trim());
-    return { title, description };
-  });
+function parseMoney(value: unknown, fallback: number): number {
+  const text = String(value ?? '').replace(/[^\d.]/g, '');
+  if (!text) return fallback;
+  return Math.max(0, toNumber(text, fallback));
 }
 
-function estimateBudget(description: string): number {
-  const fixed = description.match(/Budget:\s*\$([\d,]+)/i);
-  if (fixed) return Math.max(100, toNumber(fixed[1].replace(/,/g, ''), 0));
-  const hourlyRange = description.match(/Hourly Range:\s*\$([\d.]+)\s*-\s*\$([\d.]+)/i);
-  if (hourlyRange) {
-    const lo = toNumber(hourlyRange[1], 0);
-    const hi = toNumber(hourlyRange[2], lo);
-    return Number((((lo + hi) / 2) * 12).toFixed(2));
-  }
-  return 600;
-}
+function normalizeRapidApiJobs(payload: any, niche: string, limit: number): GigPosting[] {
+  const candidates: any[] = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.jobs)
+      ? payload.jobs
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.results)
+          ? payload.results
+          : [];
 
-function estimateHours(description: string): number {
-  const duration = description.match(/Duration:\s*([^|]+)/i)?.[1] || '';
-  if (/more than 6 months/i.test(duration)) return 40;
-  if (/3 to 6 months/i.test(duration)) return 28;
-  if (/1 to 3 months/i.test(duration)) return 20;
-  if (/Less than 1 month/i.test(duration)) return 12;
-  return 14;
-}
+  return candidates
+    .map((job: any) => {
+      const title = String(
+        job?.title ??
+          job?.job_title ??
+          job?.name ??
+          'Untitled gig'
+      ).trim();
+      const budget = Math.max(
+        100,
+        parseMoney(
+          job?.budget ??
+            job?.budget_amount ??
+            job?.budgetUsd ??
+            job?.hourly_rate ??
+            job?.rate,
+          600
+        )
+      );
+      const proposalCount = Math.max(
+        0,
+        toInteger(
+          job?.proposals ??
+            job?.proposals_count ??
+            job?.proposalCount ??
+            job?.bids_count,
+          10
+        )
+      );
+      const estimatedHours = clamp(
+        toNumber(
+          job?.estimated_hours ??
+            job?.duration_hours ??
+            job?.hours ??
+            14,
+          14
+        ),
+        1,
+        80
+      );
+      const urgency = normalizeUrgency(
+        job?.urgency ??
+          (String(job?.type || '').toLowerCase().includes('urgent') ? 'high' : 'medium')
+      );
 
-function estimateProposals(description: string): number {
-  const proposals = description.match(/Proposals:\s*([^|]+)/i)?.[1] || '';
-  if (/Less than 5/i.test(proposals)) return 4;
-  if (/5 to 10/i.test(proposals)) return 8;
-  if (/10 to 15/i.test(proposals)) return 12;
-  if (/15 to 20/i.test(proposals)) return 17;
-  if (/20 to 50/i.test(proposals)) return 28;
-  if (/50\+/i.test(proposals)) return 60;
-  return 10;
-}
-
-function estimateUrgency(title: string, description: string): 'low' | 'medium' | 'high' {
-  const hay = `${title} ${description}`.toLowerCase();
-  if (hay.includes('urgent') || hay.includes('asap') || hay.includes('immediately')) return 'high';
-  if (hay.includes('long-term') || hay.includes('ongoing')) return 'low';
-  return 'medium';
-}
-
-async function fetchUpworkRssGigs(niche: string, limit: number, timeoutMs: number): Promise<GigPosting[]> {
-  const query = encodeURIComponent(niche || 'automation');
-  const url = `https://www.upwork.com/ab/feed/jobs/rss?q=${query}&sort=recency`;
-  const xml = await fetchText(url, timeoutMs);
-  const items = parseRssItems(xml);
-  return items
-    .map(({ title, description }) => ({
-      platform: 'upwork' as const,
-      title: title || 'Upwork listing',
-      category: niche || 'general',
-      budget_usd: estimateBudget(description),
-      estimated_hours: estimateHours(description),
-      urgency: estimateUrgency(title, description),
-      client_rating: 4.6,
-      proposal_count: estimateProposals(description),
-    }))
+      return {
+        platform: normalizePlatform(job?.platform || 'upwork'),
+        title,
+        category: String(job?.category ?? job?.subcategory ?? niche ?? 'general'),
+        budget_usd: Number(budget.toFixed(2)),
+        estimated_hours: Number(estimatedHours.toFixed(2)),
+        urgency,
+        client_rating: clamp(toNumber(job?.client_rating ?? job?.buyer_rating ?? 4.6, 4.6), 0, 5),
+        proposal_count: proposalCount,
+      } as GigPosting;
+    })
+    .filter((job) => job.title && job.title !== 'Untitled gig')
     .slice(0, limit);
+}
+
+async function fetchRapidApiGigs(niche: string, limit: number, timeoutMs: number): Promise<GigPosting[]> {
+  const host = String(process.env.RAPIDAPI_HOST || '').trim();
+  const key = String(process.env.RAPIDAPI_KEY || '').trim();
+  if (!host || !key) {
+    throw new Error('rapidapi_not_configured');
+  }
+
+  const baseUrl = String(
+    process.env.RAPIDAPI_GIGS_URL || `https://${host}/search`
+  ).trim();
+  const url = new URL(baseUrl);
+  if (!url.searchParams.has('query')) url.searchParams.set('query', niche || 'automation');
+  if (!url.searchParams.has('limit')) url.searchParams.set('limit', String(limit));
+
+  const payload = await fetchJson(url.toString(), timeoutMs, {
+    'x-rapidapi-host': host,
+    'x-rapidapi-key': key,
+    accept: 'application/json',
+  });
+  return normalizeRapidApiJobs(payload, niche, limit);
 }
 
 function cleanGigs(input: GigScannerInput): GigPosting[] {
@@ -244,16 +267,16 @@ async function resolveGigs(input: GigScannerInput): Promise<{ gigs: GigPosting[]
   }
 
   const niche = String(input.niche || 'automation');
-  const limit = envNumber('UPWORK_RSS_LIMIT', 10, 3, 30);
-  const timeoutMs = envNumber('UPWORK_RSS_TIMEOUT_MS', 7000, 1500, 20000);
+  const limit = envNumber('RAPIDAPI_GIGS_LIMIT', 10, 3, 30);
+  const timeoutMs = envNumber('RAPIDAPI_GIGS_TIMEOUT_MS', 7000, 1500, 20000);
   try {
-    const live = await fetchUpworkRssGigs(niche, limit, timeoutMs);
+    const live = await fetchRapidApiGigs(niche, limit, timeoutMs);
     if (live.length > 0) {
       return {
         gigs: live,
         ingestion: {
           mode: 'live',
-          sources: ['upwork.rss'],
+          sources: ['rapidapi.gigs'],
           fetched_at: new Date().toISOString(),
           gig_count: live.length,
         },

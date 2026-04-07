@@ -111,7 +111,7 @@ Pass one user message with JSON fields:
 - optional available_hours_per_day and team_capacity for arbitrage-planner
 
 ## Autonomous live mode
-If gigs[] is omitted or empty, GigArb auto-fetches Upwork RSS jobs for the niche and runs scoring end-to-end.
+If gigs[] is omitted or empty, GigArb auto-fetches jobs from a configured RapidAPI endpoint and runs scoring end-to-end.
 Response includes ingestion.mode (live/fallback/provided), data sources, fetch timestamp, and gig_count.
 
 ## Notes
