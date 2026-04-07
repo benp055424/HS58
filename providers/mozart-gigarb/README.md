@@ -2,6 +2,8 @@
 
 DRAIN micropayment provider for freelance gig arbitrage: gig scoring, proposal drafting, conversion tracking, and capacity planning.
 
+Autonomous mode: when `gigs[]` is not provided, GigArb fetches live Upwork RSS jobs for the niche and runs ranking automatically, with deterministic fallback gigs if upstream sources fail.
+
 ## Models
 
 | Model | Description | Default Price |

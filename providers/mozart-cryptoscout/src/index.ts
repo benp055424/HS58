@@ -109,6 +109,10 @@ Pass one user message with JSON fields:
 - optional open_positions for risk-sentry
 - optional selected_symbol, portfolio_usd, risk_budget_pct for trade-brief
 
+## Autonomous live mode
+If assets[] is omitted or empty, CryptoScout auto-fetches live market data and runs scoring end-to-end.
+Response includes ingestion.mode (live/fallback/provided), data sources, fetch timestamp, and asset_count.
+
 ## Notes
 - Rate limit: ${config.rateLimitPerMinute} req/min per channel
 - Outputs are deterministic scouting artifacts and are not financial advice.

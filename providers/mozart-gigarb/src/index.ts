@@ -104,11 +104,15 @@ This is NOT a chat/LLM provider. It returns deterministic JSON gig arbitrage and
 
 ## Input format
 Pass one user message with JSON fields:
-- niche, target_daily_income_usd, gigs[]
+- niche, target_daily_income_usd, gigs[] (optional)
 - gigs[] entries support platform, title, category, budget_usd, estimated_hours, urgency, client_rating, proposal_count
 - optional selected_gig_title and portfolio_highlights for proposal-drafter
 - optional proposals_sent[] for conversion-tracker
 - optional available_hours_per_day and team_capacity for arbitrage-planner
+
+## Autonomous live mode
+If gigs[] is omitted or empty, GigArb auto-fetches Upwork RSS jobs for the niche and runs scoring end-to-end.
+Response includes ingestion.mode (live/fallback/provided), data sources, fetch timestamp, and gig_count.
 
 ## Notes
 - Rate limit: ${config.rateLimitPerMinute} req/min per channel

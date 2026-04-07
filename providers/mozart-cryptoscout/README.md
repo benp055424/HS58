@@ -2,6 +2,8 @@
 
 DRAIN micropayment provider for crypto opportunity scanning, ranking, risk sentry, and trade-brief generation.
 
+Autonomous mode: when `assets[]` is not provided, CryptoScout fetches live market inputs (CoinGecko + Fear/Greed) and runs scoring automatically, with deterministic fallback data if upstream sources fail.
+
 ## Models
 
 | Model | Description | Default Price |
