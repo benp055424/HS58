@@ -25,7 +25,7 @@ Created: 2026-04-07 (post initial 15-skill publish)
 
 ---
 
-## 2) Published skills registry (Wave 1 + Wave 2 intent)
+## 2) Published skills registry
 
 Status legend:
 - `published`
@@ -45,16 +45,16 @@ Decision legend (set at checkpoints):
 | 3 | Weekly Income Sprint Operator | (awaiting approved trio) | published | pending | pending | Published by user |
 | 4 | Evidence-First Growth Auditor | (awaiting approved trio) | published | pending | pending | Published by user |
 | 5 | TAO Accumulation Operating System | (awaiting approved trio) | published | pending | pending | Published by user |
-| 6 | Bittensor Weekly Ecosystem Revenue Brief | `marketintel/*`, `observability/*`, `profitops/*` | draft | pending | pending | Approved-only path |
-| 7 | Subnet Route and Allocation Commander | `subnetpulse/*`, `observability/*`, `allocator/*` | draft | pending | pending | Approved-only path |
-| 8 | Launch Readiness and Quality Gate | `catalogops/*`, `qualityops/*`, `governanceops/*` | draft | pending | pending | Approved-only path |
-| 9 | Incident Containment and Revenue Recovery | `incidentops/*`, `uptimeops/*`, `profitops/*` | draft | pending | pending | Approved-only path |
-| 10 | Delegation and Treasury Growth Operator | `delegationops/*`, `treasuryops/*` | draft | pending | pending | Approved-only path |
-| 11 | Provider Competitive Win System | `competeops/*`, `marketintel/*`, `opsguard/*` | draft | pending | pending | Approved-only path |
-| 12 | Ops Reliability to Growth Flywheel | `uptimeops/*`, `observability/*`, `growthops/*` | draft | pending | pending | Approved-only path |
-| 13 | Capital Guardrail Planner for Providers | `opsguard/*`, `treasuryops/*` | draft | pending | pending | Approved-only path |
-| 14 | Marketplace Positioning and Offer Pack | `marketintel/*`, `growthops/*`, `catalogops/*` | draft | pending | pending | Approved-only path |
-| 15 | 30-Day Provider Performance Operating Plan | `observability/*`, `profitops/*`, `uptimeops/*`, `treasuryops/*` | draft | pending | pending | Approved-only path |
+| 6 | Bittensor Weekly Ecosystem Revenue Brief | `marketintel/*`, `observability/*`, `profitops/*` | published | pending | pending | Live in marketplace |
+| 7 | Subnet Route and Allocation Commander | `subnetpulse/*`, `observability/*`, `allocator/*` | published | pending | pending | Live in marketplace |
+| 8 | Launch Readiness and Quality Gate | `catalogops/*`, `qualityops/*`, `governanceops/*` | published | pending | pending | Live in marketplace |
+| 9 | Incident Containment and Revenue Recovery | `incidentops/*`, `uptimeops/*`, `profitops/*` | published | pending | pending | Live in marketplace |
+| 10 | Delegation and Treasury Growth Operator | `delegationops/*`, `treasuryops/*` | published | pending | pending | Live in marketplace |
+| 11 | Provider Competitive Win System | `competeops/*`, `marketintel/*`, `opsguard/*` | published | pending | pending | Live in marketplace |
+| 12 | Ops Reliability to Growth Flywheel | `uptimeops/*`, `observability/*`, `growthops/*` | published | pending | pending | Live in marketplace |
+| 13 | Capital Guardrail Planner for Providers | `opsguard/*`, `treasuryops/*` | published | pending | pending | Live in marketplace |
+| 14 | Marketplace Positioning and Offer Pack | `marketintel/*`, `growthops/*`, `catalogops/*` | published | pending | pending | Live in marketplace |
+| 15 | 30-Day Provider Performance Operating Plan | `observability/*`, `profitops/*`, `uptimeops/*`, `treasuryops/*` | published | pending | pending | Live in marketplace |
 
 ---
 
@@ -100,5 +100,5 @@ If in doubt: mark `improve`, edit prompt for tighter artifact/value language, an
 |---|---|---|
 | 2026-04-07 | Published first 15 skills (user update) | Baseline captured |
 | 2026-04-07 | Captured provider baseline snapshot | `analysis/hs58_post_skill_publish_snapshot.*` |
+| 2026-04-07 | Updated skills 6–15 status from draft to published | Confirmed live in marketplace |
 
-Append all prompt edits, publish events, and checkpoint outcomes here.
