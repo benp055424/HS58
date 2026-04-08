@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-04-08T13:32:59.909Z",
+  "marketplaceUrl": "https://handshake58.com",
+  "endpoints": {
+    "providersUrl": "https://handshake58.com/api/mcp/providers",
+    "skillsUrl": "https://handshake58.com/api/skills?status=published",
+    "homepageUrl": "https://handshake58.com/"
+  },
+  "providers": {
+    "count": 124,
+    "totalBeforeProfileFilter": 124,
+    "timestamp": "2026-04-08T13:33:00.481Z",
+    "protocolCounts": {
+      "mpp": 80,
+      "drain": 44
+    },
+    "tierCounts": {
+      "community": 123,
+      "bittensor": 1
+    },
+    "categoryCounts": {
+      "data": 47,
+      "llm": 20,
+      "other": 16,
+      "network": 9,
+      "scraping": 9,
+      "search": 8,
+      "code": 5,
+      "multi-modal": 4,
+      "forecasting": 2,
+      "video": 2,
+      "audio": 1,
+      "scheduling": 1
+    },
+    "onlineCount": 124,
+    "providersWithModels": 44
+  },
+  "skills": {
+    "total": 105,
+    "pageCount": 12,
+    "page": 1,
+    "pages": 9,
+    "zeroWorksOnPage": 6,
+    "healthyOnPage": 12,
+    "topByViewOnPage": [
+      {
+        "slug": "bittensor-subnet-due-diligence",
+        "viewCount": 189,
+        "worksCount": 3,
+        "costEstimate": 0.4,
+        "health": "healthy"
+      },
+      {
+        "slug": "tao-price-subnet-report",
+        "viewCount": 173,
+        "worksCount": 8,
+        "costEstimate": 0.16,
+        "health": "healthy"
+      },
+      {
+        "slug": "twitter-crypto-sentiment-analysis-v2",
+        "viewCount": 36,
+        "worksCount": 1,
+        "costEstimate": 0.03,
+        "health": "healthy"
+      },
+      {
+        "slug": "website-style-image-generator",
+        "viewCount": 34,
+        "worksCount": 3,
+        "costEstimate": 0.21,
+        "health": "healthy"
+      },
+      {
+        "slug": "bittensor-weekly-ecosystem-report-v2",
+        "viewCount": 14,
+        "worksCount": 1,
+        "costEstimate": 0.36,
+        "health": "healthy"
+      }
+    ]
+  },
+  "homepage": {
+    "hash": "52e624025dd55a5f8ed346af83466b281edb38de770b3335cc54cfdb9dc48b2e",
+    "length": 226787
+  },
+  "deltas": {
+    "providersCountDelta": 0,
+    "skillsTotalDelta": 0,
+    "homepageChanged": false,
+    "protocolCountsDelta": {},
+    "tierCountsDelta": {},
+    "categoryCountsDelta": {}
+  },
+  "previousSnapshot": null
+}
